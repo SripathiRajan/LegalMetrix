@@ -152,14 +152,21 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
       <div className="text-center space-y-2">
         <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-300 text-xs font-semibold">
           <Sparkles className="w-3.5 h-3.5" />
-          <span>Multi-Panel OCR Ensemble • Upload 2+ Panels (Front, Back, Sides)</span>
+          <span>
+            {inputType === 'ecommerce_listing'
+              ? 'E-Commerce PDP Compliance • Marketplace Screenshots & Multi-Image Carousels'
+              : 'Multi-Panel OCR Ensemble • Upload 2+ Panels (Front, Back, Sides)'}
+          </span>
         </div>
         <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white font-display">
-          Statutory Compliance Inspection Scanner
+          {inputType === 'ecommerce_listing'
+            ? 'E-Commerce Marketplace Compliance Scanner'
+            : 'Statutory Compliance Inspection Scanner'}
         </h1>
         <p className="text-sm text-slate-400 max-w-2xl mx-auto">
-          Upload 1 or more product panel images (e.g. front &amp; back display panels). The engine merges extracted fields intelligently and validates declarations against 
-          the <span className="text-brand-300 font-semibold">Legal Metrology (Packaged Commodities) Rules, 2011</span>.
+          {inputType === 'ecommerce_listing'
+            ? 'Upload 1 or more e-commerce listing screenshots or marketplace product carousel images. The engine extracts statutory declarations and validates compliance under Rule 6(10) & DoCA guidelines.'
+            : 'Upload 1 or more product panel images (e.g. front & back display panels). The engine merges extracted fields intelligently and validates declarations against the Legal Metrology (Packaged Commodities) Rules, 2011.'}
         </p>
       </div>
 
@@ -228,7 +235,7 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
             <div className="w-full space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-brand-300">
-                  {previewUrls.length} {previewUrls.length === 1 ? 'Panel Image' : 'Panel Images'} Selected (Multi-Panel Fusion)
+                  {previewUrls.length} {previewUrls.length === 1 ? 'Image' : 'Images'} Selected ({inputType === 'ecommerce_listing' ? 'Listing Carousel Fusion' : 'Multi-Panel Fusion'})
                 </span>
                 <div className="flex items-center space-x-2">
                   <button
@@ -236,7 +243,7 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
                     onClick={() => fileInputRef.current?.click()}
                     className="px-3 py-1.5 rounded-lg bg-brand-600/20 hover:bg-brand-600/30 border border-brand-500/40 text-xs text-brand-200 font-semibold transition-all"
                   >
-                    + Add Another Panel
+                    + Add Another Image
                   </button>
                   <button
                     type="button"
@@ -252,9 +259,9 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[340px] overflow-y-auto p-2 bg-slate-950 rounded-xl border border-slate-800">
                 {previewUrls.map((url, idx) => (
                   <div key={idx} className="relative group rounded-lg overflow-hidden border border-slate-700 bg-slate-900 h-36 flex items-center justify-center">
-                    <img src={url} alt={`Panel ${idx + 1}`} className="w-full h-full object-contain" />
+                    <img src={url} alt={`Image ${idx + 1}`} className="w-full h-full object-contain" />
                     <div className="absolute top-1 left-1 px-2 py-0.5 rounded bg-slate-900/80 backdrop-blur text-[10px] font-bold text-slate-200 border border-slate-700">
-                      Panel #{idx + 1}
+                      {inputType === 'ecommerce_listing' ? `Listing Image #${idx + 1}` : `Panel #${idx + 1}`}
                     </div>
                     <button
                       type="button"
@@ -286,10 +293,14 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
                 <UploadCloud className="w-8 h-8" />
               </div>
               <p className="text-base font-semibold text-slate-200">
-                Drag and drop package images here (1 or multiple panels)
+                {inputType === 'ecommerce_listing'
+                  ? 'Drag and drop e-commerce listing screenshots here'
+                  : 'Drag and drop package images here (1 or multiple panels)'}
               </p>
               <p className="text-xs text-slate-400 mt-1">
-                Select front, back, or side panels simultaneously. Supports JPG, PNG, WEBP.
+                {inputType === 'ecommerce_listing'
+                  ? 'Upload screenshots of product page, specification table, or carousel images.'
+                  : 'Select front, back, or side panels simultaneously. Supports JPG, PNG, WEBP.'}
               </p>
 
               <div className="flex items-center space-x-3 mt-6">
@@ -403,7 +414,11 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
             ) : (
               <>
                 <ShieldCheck className="w-4 h-4" />
-                <span>Verify Package Compliance</span>
+                <span>
+                  {inputType === 'ecommerce_listing'
+                    ? 'Verify E-Commerce Listing Compliance'
+                    : 'Verify Package Compliance'}
+                </span>
               </>
             )}
           </button>
