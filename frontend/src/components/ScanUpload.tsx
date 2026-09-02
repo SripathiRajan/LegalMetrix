@@ -137,10 +137,9 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
 
       onScanComplete(response, previewUrls[0] || '');
     } catch (err: any) {
-      setError(
-        err?.response?.data?.detail ||
-          'Analysis failed. Ensure the images are clear package or product listing images and try again.'
-      );
+      const detail = err?.response?.data?.detail;
+      const msg = typeof detail === 'string' ? detail : (typeof detail === 'object' ? JSON.stringify(detail) : (err?.message || 'Analysis failed. Ensure the images are clear package or product listing images and try again.'));
+      setError(msg);
     } finally {
       setIsAnalyzing(false);
     }

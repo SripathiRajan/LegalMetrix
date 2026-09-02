@@ -161,7 +161,15 @@ async def extract_declarations_from_image(
     try:
         image_bytes_list: List[bytes] = []
         for f in upload_list:
-            if f.content_type and not f.content_type.startswith("image/"):
+            content_type = (f.content_type or "").lower()
+            fname = (f.filename or "").lower()
+            is_image = (
+                not content_type or
+                content_type.startswith("image/") or
+                content_type in ("application/octet-stream", "binary/octet-stream") or
+                any(fname.endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"))
+            )
+            if not is_image:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Invalid file type '{f.content_type}'. Please upload a valid image file (JPEG, PNG, etc.)."
@@ -349,7 +357,15 @@ async def analyze_product_image(
     try:
         image_bytes_list: List[bytes] = []
         for f in upload_list:
-            if f.content_type and not f.content_type.startswith("image/"):
+            content_type = (f.content_type or "").lower()
+            fname = (f.filename or "").lower()
+            is_image = (
+                not content_type or
+                content_type.startswith("image/") or
+                content_type in ("application/octet-stream", "binary/octet-stream") or
+                any(fname.endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff"))
+            )
+            if not is_image:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Invalid file type '{f.content_type}'. Please upload an image file."
