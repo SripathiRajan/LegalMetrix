@@ -10,6 +10,7 @@ import { ScanHistoryView } from './components/ScanHistoryView';
 import { ChatAssistant } from './components/ChatAssistant';
 import { AuthModal } from './components/AuthModal';
 import type { AnalyzeScanResponse } from './types/api';
+import { Shield, ExternalLink } from 'lucide-react';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,7 +38,7 @@ export const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-brand-500 selection:text-white">
+    <div className="min-h-screen flex flex-col" style={{ background: 'var(--surface-0)' }}>
       {/* Top Navbar */}
       <Header
         activeTab={activeTab}
@@ -48,7 +49,7 @@ export const AppContent: React.FC = () => {
       />
 
       {/* Main View Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-7 sm:py-9">
         {activeTab === 'scan' && (
           <>
             {scanResult ? (
@@ -56,6 +57,7 @@ export const AppContent: React.FC = () => {
                 result={scanResult}
                 originalImageSrc={originalImageSrc}
                 onReset={handleResetScan}
+                onOpenChat={() => setActiveTab('assistant')}
               />
             ) : (
               <ScanUpload onScanComplete={handleScanComplete} />
@@ -64,21 +66,39 @@ export const AppContent: React.FC = () => {
         )}
 
         {activeTab === 'dashboard' && <DashboardView />}
-
         {activeTab === 'history' && <ScanHistoryView />}
-
-        {activeTab === 'assistant' && <ChatAssistant />}
+        {activeTab === 'assistant' && (
+          <ChatAssistant
+            scanResult={scanResult}
+            originalImageSrc={originalImageSrc}
+            onOpenScanTab={() => setActiveTab('scan')}
+            onClose={() => setActiveTab('scan')}
+          />
+        )}
       </main>
 
       {/* Footer */}
-      <footer className="w-full border-t border-slate-900 bg-slate-950/80 py-4 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>
-            LegalMetrix AI • Department of Consumer Affairs (DoCA) Compliance Suite
-          </span>
-          <span className="text-[11px] text-slate-600">
-            Legal Metrology (Packaged Commodities) Rules, 2011 • DINOv2 Visual Authenticity
-          </span>
+      <footer className="w-full border-t py-5" style={{ borderColor: 'rgba(255,255,255,0.04)', background: 'rgba(8,15,30,0.8)' }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 text-xs text-slate-500">
+            <div className="w-6 h-6 rounded-lg flex items-center justify-center"
+              style={{ background: 'linear-gradient(135deg, rgba(1,113,199,0.3), rgba(79,70,229,0.3))', border: '1px solid rgba(14,165,233,0.2)' }}
+            >
+              <Shield className="w-3.5 h-3.5 text-sky-400" />
+            </div>
+            <span>
+              <span className="text-slate-300 font-semibold">LegalMetrix AI</span>
+              {' '}· Legal Compliance Platform
+            </span>
+          </div>
+          <div className="flex items-center gap-4 text-[11px] text-slate-600">
+            <span>Packaged Commodities Compliance · 2011</span>
+            <span className="hidden sm:inline">·</span>
+            <span className="hidden sm:flex items-center gap-1">
+              Visual Authenticity Verification
+              <ExternalLink className="w-3 h-3" />
+            </span>
+          </div>
         </div>
       </footer>
 
