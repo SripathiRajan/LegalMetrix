@@ -91,6 +91,19 @@ class ExtractedProductData(BaseModel):
     is_imported: bool = Field(default=False, description="Flag if product appears to be imported based on extraction")
     category: str = Field(default="general", description="Inferred category")
 
+    def get_fields(self) -> Dict[str, ExtractedField]:
+        """
+        Returns a dictionary of all statutory ExtractedField instances in this model.
+        """
+        field_names = [
+            "product_name", "commodity_name", "manufacturer_name", "manufacturer_address",
+            "packer_name", "packer_address", "importer_name", "importer_address",
+            "net_quantity", "mrp", "unit_sale_price", "date_declaration", "best_before",
+            "consumer_care", "consumer_care_email", "consumer_care_phone", "consumer_care_address",
+            "country_of_origin"
+        ]
+        return {name: getattr(self, name) for name in field_names if isinstance(getattr(self, name, None), ExtractedField)}
+
     def to_product_input(self, raw_text: Optional[str] = None) -> ProductInput:
         """
         Converts extracted fields into the ProductInput schema required by the Compliance Rule Engine.
