@@ -1,4 +1,6 @@
 import logging
+
+logger = logging.getLogger(__name__)
 from typing import Optional, Dict, Any, Tuple, List
 from app.models.product import ProductInput, ComplianceResponse
 from app.models.extracted_product import (
