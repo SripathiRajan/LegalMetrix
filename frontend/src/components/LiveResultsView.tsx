@@ -9,10 +9,17 @@ import {
   Scale, 
   BookOpen, 
   Eye, 
-  Sparkles
+  Sparkles,
+  FileSpreadsheet,
+  FileCode2,
+  RefreshCw,
+  Package,
+  ShoppingBag,
+  Info
 } from 'lucide-react';
 import type { AnalyzeScanResponse } from '../types/api';
 import { scanApi } from '../services/api';
+import { FONT_SIZE_DISCLAIMER } from '../constants';
 
 interface LiveResultsViewProps {
   result: AnalyzeScanResponse;
@@ -26,7 +33,7 @@ export const LiveResultsView: React.FC<LiveResultsViewProps> = ({
   onReset,
 }) => {
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'FAIL' | 'WARNING' | 'PASS'>('ALL');
-  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
   const { compliance_result, visual_evidence, authenticity_result, scan_id, ocr_summary } = result;
   const isCompliant = compliance_result.overall_status === 'COMPLIANT';
@@ -38,27 +45,79 @@ export const LiveResultsView: React.FC<LiveResultsViewProps> = ({
     return rule.status === selectedFilter;
   });
 
-  // Download PDF Report
+  const downloadFile = (blob: Blob, filename: string) => {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  };
+
+  // Download Handlers
   const handleDownloadPdf = async () => {
     if (!scan_id) {
       alert('PDF Report is available for saved scans. Scan ID was not generated.');
       return;
     }
     try {
-      setIsDownloadingPdf(true);
+      setActionInProgress('pdf');
       const blob = await scanApi.downloadPdfBlob(scan_id);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `LegalMetrology_Compliance_Report_Scan_${scan_id}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      downloadFile(blob, `LegalMetrology_Compliance_Report_Scan_${scan_id}.pdf`);
     } catch {
       alert('Failed to download PDF report. Ensure backend PDF generator is running.');
     } finally {
-      setIsDownloadingPdf(false);
+      setActionInProgress(null);
+    }
+  };
+
+  const handleDownloadExcel = async () => {
+    if (!scan_id) {
+      alert('Excel export is available for saved scans.');
+      return;
+    }
+    try {
+      setActionInProgress('xlsx');
+      const blob = await scanApi.downloadXlsxBlob(scan_id);
+      downloadFile(blob, `LegalMetrology_Compliance_Audit_Scan_${scan_id}.xlsx`);
+    } catch {
+      alert('Failed to download Excel report.');
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  const handleDownloadCsv = async () => {
+    if (!scan_id) {
+      alert('CSV export is available for saved scans.');
+      return;
+    }
+    try {
+      setActionInProgress('csv');
+      const blob = await scanApi.downloadCsvBlob(scan_id);
+      downloadFile(blob, `LegalMetrology_Scan_${scan_id}_Export.csv`);
+    } catch {
+      alert('Failed to download CSV export.');
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  const handleDownloadDocx = async () => {
+    if (!scan_id) {
+      alert('Show-Cause Draft is available for saved scans.');
+      return;
+    }
+    try {
+      setActionInProgress('docx');
+      const blob = await scanApi.downloadDocxBlob(scan_id);
+      downloadFile(blob, `Show_Cause_Notice_Draft_Scan_${scan_id}.docx`);
+    } catch {
+      alert('Failed to generate Show-Cause notice draft.');
+    } finally {
+      setActionInProgress(null);
     }
   };
 
@@ -70,25 +129,75 @@ export const LiveResultsView: React.FC<LiveResultsViewProps> = ({
   return (
     <div className="w-full max-w-6xl mx-auto space-y-6 animate-fade-in">
       {/* Top Action Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <button
           onClick={onReset}
-          className="flex items-center space-x-2 text-xs font-semibold text-slate-400 hover:text-slate-100 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 transition-colors"
+          className="flex items-center space-x-2 text-xs font-semibold text-slate-400 hover:text-slate-100 px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>New Inspection Scan</span>
         </button>
 
-        <div className="flex items-center space-x-3 w-full sm:w-auto justify-between sm:justify-end">
+        {/* Action Buttons: PDF, Excel, CSV, Show-Cause Notice */}
+        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto justify-start lg:justify-end">
           {scan_id && (
-            <button
-              onClick={handleDownloadPdf}
-              disabled={isDownloadingPdf}
-              className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg transition-all active:scale-95 disabled:opacity-50"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>{isDownloadingPdf ? 'Generating PDF...' : 'Download Official PDF Report'}</span>
-            </button>
+            <>
+              <button
+                onClick={handleDownloadCsv}
+                disabled={actionInProgress === 'csv'}
+                className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-800 text-slate-200 font-semibold text-xs transition-all active:scale-95 disabled:opacity-50"
+                title="Download single scan CSV report"
+              >
+                {actionInProgress === 'csv' ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <FileCode2 className="w-3.5 h-3.5 text-indigo-400" />
+                )}
+                <span>Download CSV</span>
+              </button>
+
+              <button
+                onClick={handleDownloadExcel}
+                disabled={actionInProgress === 'xlsx'}
+                className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 font-semibold text-xs transition-all active:scale-95 disabled:opacity-50"
+                title="Download formatted Excel (.xlsx) report"
+              >
+                {actionInProgress === 'xlsx' ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                )}
+                <span>Download Excel</span>
+              </button>
+
+              <button
+                onClick={handleDownloadPdf}
+                disabled={actionInProgress === 'pdf'}
+                className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-glow transition-all active:scale-95 disabled:opacity-50"
+                title="Download official PDF report"
+              >
+                {actionInProgress === 'pdf' ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                <span>Download PDF</span>
+              </button>
+
+              <button
+                onClick={handleDownloadDocx}
+                disabled={actionInProgress === 'docx'}
+                className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold text-xs shadow-lg transition-all active:scale-95 disabled:opacity-50"
+                title="Generate official Show-Cause Notice Draft"
+              >
+                {actionInProgress === 'docx' ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <FileText className="w-3.5 h-3.5" />
+                )}
+                <span>Generate Show-Cause Draft (DOCX)</span>
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -107,7 +216,7 @@ export const LiveResultsView: React.FC<LiveResultsViewProps> = ({
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1.5">
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span
                   className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
                     isCompliant
@@ -119,6 +228,20 @@ export const LiveResultsView: React.FC<LiveResultsViewProps> = ({
                 >
                   {compliance_result.overall_status.replace(/_/g, ' ')}
                 </span>
+
+                {/* E-Commerce Listing vs Physical Package Badge */}
+                {compliance_result.input_type === 'ecommerce_listing' ? (
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center space-x-1.5" title="E-commerce listing screenshot analysis (physical pack font height/panel placement set to Not Applicable)">
+                    <ShoppingBag className="w-3.5 h-3.5" />
+                    <span>E-Commerce Listing Analysis</span>
+                  </span>
+                ) : (
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-800/80 text-slate-300 border border-slate-700/60 flex items-center space-x-1.5" title="Physical packaged commodity label scan">
+                    <Package className="w-3.5 h-3.5 text-brand-400" />
+                    <span>Physical Package Inspection</span>
+                  </span>
+                )}
+
                 {scan_id && (
                   <span className="text-xs text-slate-400 font-mono">
                     Scan ID #{scan_id}
@@ -262,6 +385,17 @@ export const LiveResultsView: React.FC<LiveResultsViewProps> = ({
           <p className="text-[10px] text-slate-500 italic text-center">
             Green boxes represent compliant statutory declarations; Red boxes indicate missing, obscured, or non-compliant text.
           </p>
+
+          {/* Font Size & Readability Measurement Disclaimer Callout */}
+          <div className="mt-2 p-3 rounded-xl bg-slate-900/90 border border-slate-800/90 space-y-1">
+            <div className="flex items-center space-x-1.5 text-brand-300 font-semibold text-[11px]">
+              <Info className="w-3.5 h-3.5 text-brand-400 flex-shrink-0" />
+              <span>Font Size Measurement & Readability Notice</span>
+            </div>
+            <p className="text-slate-400 text-[10.5px] leading-relaxed">
+              {FONT_SIZE_DISCLAIMER}
+            </p>
+          </div>
         </div>
 
         {/* Right: Statutory Declarations Table (PCR 2011) */}
@@ -373,6 +507,14 @@ export const LiveResultsView: React.FC<LiveResultsViewProps> = ({
             )}
           </div>
         </div>
+      </div>
+
+      {/* Permanent DoCA Legal Grounding Footer Info Card */}
+      <div className="pt-4 border-t border-slate-800/80 text-center">
+        <p className="text-xs text-slate-400 font-medium inline-flex items-center justify-center space-x-2 bg-slate-900/80 px-4 py-2 rounded-full border border-slate-800">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Powered by Official Legal Metrology (Packaged Commodities) Rules, 2011 and amendments issued by Department of Consumer Affairs</span>
+        </p>
       </div>
     </div>
   );

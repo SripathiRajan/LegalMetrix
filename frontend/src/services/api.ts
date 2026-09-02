@@ -48,6 +48,7 @@ export const scanApi = {
       preprocessing_strategy?: string;
       brand_name?: string;
       persist?: boolean;
+      input_type?: 'physical_package' | 'ecommerce_listing';
     } = {}
   ): Promise<AnalyzeScanResponse> => {
     const formData = new FormData();
@@ -58,6 +59,7 @@ export const scanApi = {
     if (options.preprocessing_strategy) params.preprocessing_strategy = options.preprocessing_strategy;
     if (options.brand_name) params.brand_name = options.brand_name;
     if (options.persist !== undefined) params.persist = options.persist;
+    if (options.input_type) params.input_type = options.input_type;
 
     const response = await api.post<AnalyzeScanResponse>('/api/analyze', formData, {
       params,
@@ -90,6 +92,41 @@ export const scanApi = {
 
   downloadPdfBlob: async (id: number): Promise<Blob> => {
     const response = await api.get(`/api/scans/${id}/report.pdf`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  downloadCsvBlob: async (id: number): Promise<Blob> => {
+    const response = await api.get(`/api/scans/${id}/export/csv`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  downloadXlsxBlob: async (id: number): Promise<Blob> => {
+    const response = await api.get(`/api/scans/${id}/export/xlsx`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  downloadDocxBlob: async (id: number): Promise<Blob> => {
+    const response = await api.get(`/api/scans/${id}/export/docx`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  downloadBulkXlsxBlob: async (params?: {
+    status?: string;
+    officer_id?: number;
+    product_name?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<Blob> => {
+    const response = await api.get('/api/scans/export/xlsx', {
+      params,
       responseType: 'blob',
     });
     return response.data;

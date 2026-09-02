@@ -257,7 +257,8 @@ class ComplianceService:
         brand_name: Optional[str] = None,
         persist: bool = True,
         officer_id: Optional[int] = None,
-        image_path: Optional[str] = None
+        image_path: Optional[str] = None,
+        input_type: str = "physical_package"
     ) -> AnalyzeResponse:
         """
         Full end-to-end pipeline:
@@ -276,6 +277,39 @@ class ComplianceService:
 
         # Evaluate compliance via Rule Engine with visual evidence linking
         compliance_result = self.rule_engine.evaluate(product_input, extracted_data=extracted_data)
+        compliance_result.input_type = input_type
+
+        # When input_type is ecommerce_listing, adjust physical-packaging-only checks
+        if input_type == "ecommerce_listing":
+            from app.models.product import RuleStatus, OverallComplianceStatus
+            for res in compliance_result.results:
+                r_id = res.rule_id.lower()
+                if "font_size" in r_id or "readability" in r_id or "placement" in r_id or "principal_display" in r_id:
+                    res.status = RuleStatus.NOT_APPLICABLE
+                    res.reason = f"[E-commerce Listing Mode] {res.reason} (Physical pack font height / placement checks set to Not Applicable for online product listing images)."
+
+            # Recalculate summary metrics
+            compliance_result.passed = sum(1 for r in compliance_result.results if r.status == RuleStatus.PASS)
+            compliance_result.failed = sum(1 for r in compliance_result.results if r.status == RuleStatus.FAIL)
+            compliance_result.warnings = sum(1 for r in compliance_result.results if r.status == RuleStatus.WARNING)
+            compliance_result.not_applicable = sum(1 for r in compliance_result.results if r.status == RuleStatus.NOT_APPLICABLE)
+            compliance_result.violations = [r for r in compliance_result.results if r.status in (RuleStatus.FAIL, RuleStatus.WARNING)]
+
+            valid_evals = compliance_result.passed + compliance_result.failed + compliance_result.warnings
+            if valid_evals > 0:
+                compliance_result.compliance_score = round((compliance_result.passed / valid_evals) * 100.0, 1)
+            else:
+                compliance_result.compliance_score = 100.0
+
+            if compliance_result.failed == 0:
+                compliance_result.overall_status = OverallComplianceStatus.COMPLIANT
+            else:
+                compliance_result.overall_status = OverallComplianceStatus.NON_COMPLIANT
+
+            compliance_result.summary = (
+                "[E-commerce Listing Analysis Mode] All mandatory statutory text declarations (MRP, Net Quantity, Date of Mfg/Pack, Manufacturer/Importer details, Consumer Care, Country of Origin) fully evaluated. "
+                "Physical package dimension/font height checks set to Not Applicable for online product listing screenshots."
+            )
 
         # Generate annotated evidence image
         annotated_b64 = self.generate_annotated_image(original_bgr, compliance_result, extracted_data)

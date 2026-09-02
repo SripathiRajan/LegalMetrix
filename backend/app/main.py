@@ -1,5 +1,6 @@
 import io
 import logging
+from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, Any, List
 from fastapi import FastAPI, HTTPException, status, UploadFile, File, Form, Query, Depends
@@ -18,6 +19,8 @@ from app.models.extracted_product import (
 from app.services.compliance_service import ComplianceService
 from app.services.stats_service import StatsService
 from app.services.pdf_report_generator import PDFReportGenerator
+from app.services.export_service import ExportService
+from app.constants import FONT_SIZE_DISCLAIMER
 from app.rules.knowledge_base import RulesKnowledgeBase
 from app.db.session import get_db, engine
 from app.db.base import Base
@@ -83,6 +86,7 @@ app.add_middleware(
 compliance_service = ComplianceService()
 stats_service = StatsService()
 pdf_report_generator = PDFReportGenerator()
+export_service = ExportService()
 knowledge_base = RulesKnowledgeBase()
 chatbot_service = GroundedChatbotService(rules_kb=knowledge_base, stats_service=stats_service)
 
@@ -101,7 +105,8 @@ def health_check():
         "legal_basis": "Legal Metrology (Packaged Commodities) Rules, 2011",
         "version": "1.0.0",
         "ocr_engine": "PaddleOCR (Modular)",
-        "vision_module": "BBox Geometry, Spatial Placement, Readability, Skew Rectification & Multi-Pass Ranking"
+        "vision_module": "BBox Geometry, Spatial Placement, Readability, Skew Rectification & Multi-Pass Ranking",
+        "disclaimer": FONT_SIZE_DISCLAIMER
     }
 
 
@@ -286,7 +291,8 @@ async def analyze_product_image(
     multi_pass: bool = Query(True, description="Enable multi-pass image rectification and candidate ranking"),
     use_ensemble: bool = Query(False, description="Enable multi-engine OCR ensemble with orientation-aware reading order"),
     brand_name: Optional[str] = Query(None, description="Optional brand name for DINOv2 visual authenticity check"),
-    persist: bool = Query(True, description="Persist scan audit record to history database")
+    persist: bool = Query(True, description="Persist scan audit record to history database"),
+    input_type: str = Query("physical_package", description="Scan input mode: 'physical_package' or 'ecommerce_listing'")
 ):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(
@@ -308,7 +314,8 @@ async def analyze_product_image(
             multi_pass=multi_pass,
             use_ensemble=use_ensemble,
             brand_name=brand_name,
-            persist=persist
+            persist=persist,
+            input_type=input_type
         )
         return analysis
     except ValueError as ve:
@@ -480,6 +487,49 @@ def get_scan_statistics(
 
 
 @app.get(
+    "/api/scans/export/xlsx",
+    status_code=status.HTTP_200_OK,
+    tags=["Scan History & Audit"],
+    summary="Bulk Export Scans to Excel (.xlsx)",
+    description="Streams an aggregated multi-scan Excel spreadsheet with summary KPIs and violation itemization."
+)
+def export_bulk_scans_xlsx(
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by compliance status"),
+    officer_id: Optional[int] = Query(None, description="Filter by inspector / officer ID"),
+    product_name: Optional[str] = Query(None, description="Filter by partial product name"),
+    limit: int = Query(200, ge=1, le=2000, description="Max records to export"),
+    offset: int = Query(0, ge=0, description="Record offset"),
+    db: Session = Depends(get_db),
+    current_officer: Officer = Depends(get_current_active_officer)
+):
+    try:
+        records, _ = compliance_service.history_service.repository.list_scans(
+            db=db,
+            status=status_filter,
+            officer_id=officer_id,
+            product_name=product_name,
+            limit=limit,
+            offset=offset
+        )
+
+        xlsx_bytes = export_service.generate_bulk_scans_xlsx(records)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return StreamingResponse(
+            io.BytesIO(xlsx_bytes),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f'attachment; filename="legal_metrology_scans_bulk_{timestamp}.xlsx"'
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error exporting bulk scans to Excel: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate bulk Excel export: {str(e)}"
+        )
+
+
+@app.get(
     "/api/scans/{scan_id}",
     status_code=status.HTTP_200_OK,
     tags=["Scan History & Audit"],
@@ -585,6 +635,115 @@ def download_scan_pdf_report(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate PDF compliance report: {str(e)}"
+        )
+
+
+@app.get(
+    "/api/scans/{scan_id}/export/csv",
+    status_code=status.HTTP_200_OK,
+    tags=["Scan History & Audit"],
+    summary="Export Single Scan Record to CSV",
+    description="Streams an editable CSV file containing extracted product declarations and rule-by-rule evaluation."
+)
+def export_scan_csv(
+    scan_id: int,
+    db: Session = Depends(get_db),
+    current_officer: Officer = Depends(get_current_active_officer)
+):
+    record = compliance_service.history_service.get_scan_by_id(scan_id=scan_id, db=db)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Scan record #{scan_id} not found."
+        )
+
+    try:
+        csv_str = export_service.generate_scan_csv(record)
+        return StreamingResponse(
+            io.BytesIO(csv_str.encode("utf-8")),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="legal_metrology_scan_{scan_id}.csv"'
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error exporting CSV for scan #{scan_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate CSV export: {str(e)}"
+        )
+
+
+@app.get(
+    "/api/scans/{scan_id}/export/xlsx",
+    status_code=status.HTTP_200_OK,
+    tags=["Scan History & Audit"],
+    summary="Export Single Scan Record to Formatted Excel (.xlsx)",
+    description="Streams a formatted multi-sheet Excel spreadsheet (Summary, Extracted Fields, Rule Results, Visual Statistics)."
+)
+def export_scan_xlsx(
+    scan_id: int,
+    db: Session = Depends(get_db),
+    current_officer: Officer = Depends(get_current_active_officer)
+):
+    record = compliance_service.history_service.get_scan_by_id(scan_id=scan_id, db=db)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Scan record #{scan_id} not found."
+        )
+
+    try:
+        xlsx_bytes = export_service.generate_scan_xlsx(record)
+        return StreamingResponse(
+            io.BytesIO(xlsx_bytes),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f'attachment; filename="legal_metrology_scan_{scan_id}.xlsx"'
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error exporting Excel for scan #{scan_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate Excel export: {str(e)}"
+        )
+
+
+@app.get(
+    "/api/scans/{scan_id}/export/docx",
+    status_code=status.HTTP_200_OK,
+    tags=["Scan History & Audit"],
+    summary="Generate Show-Cause Notice Draft (.docx)",
+    description="Streams an official statutory Show-Cause Notice draft under Section 15 & 36 of Legal Metrology Act, 2009."
+)
+def export_scan_docx(
+    scan_id: int,
+    db: Session = Depends(get_db),
+    current_officer: Officer = Depends(get_current_active_officer)
+):
+    record = compliance_service.history_service.get_scan_by_id(scan_id=scan_id, db=db)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Scan record #{scan_id} not found."
+        )
+
+    try:
+        officer_name = current_officer.username if current_officer else None
+        docx_bytes = export_service.generate_show_cause_docx(record, officer_name=officer_name)
+        return StreamingResponse(
+            io.BytesIO(docx_bytes),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={
+                "Content-Disposition": f'attachment; filename="show_cause_notice_scan_{scan_id}.docx"'
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error generating Show-Cause Notice for scan #{scan_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate Show-Cause Notice draft: {str(e)}"
         )
 
 

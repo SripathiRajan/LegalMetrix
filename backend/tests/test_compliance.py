@@ -287,3 +287,23 @@ def test_missing_and_ambiguous_date():
     assessment_ambiguous = engine.evaluate(product_ambiguous)
     date_res_ambiguous = get_rule_result(assessment_ambiguous, "LMPC_RULE_6_1_D")
     assert date_res_ambiguous.status == RuleStatus.REQUIRES_HUMAN_VERIFICATION
+
+
+# 10. E-Commerce Listing Analysis Mode Test
+def test_ecommerce_listing_mode_analysis():
+    from app.services.compliance_service import ComplianceService
+    from PIL import Image
+    import io
+
+    # Create dummy image bytes
+    img = Image.new("RGB", (300, 300), color=(255, 255, 255))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    img_bytes = buf.getvalue()
+
+    service = ComplianceService()
+    res = service.analyze_image_end_to_end(img_bytes, input_type="ecommerce_listing", persist=False)
+    
+    assert res.compliance_result.input_type == "ecommerce_listing"
+    assert "E-commerce Listing Analysis Mode" in res.compliance_result.summary
+

@@ -7,7 +7,9 @@ import {
   RefreshCw, 
   ShieldCheck, 
   Cpu,
-  AlertCircle
+  AlertCircle,
+  Package,
+  ShoppingBag
 } from 'lucide-react';
 import { scanApi } from '../services/api';
 import type { AnalyzeScanResponse } from '../types/api';
@@ -23,6 +25,7 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
   const [useEnsemble, setUseEnsemble] = useState(true);
   const [strategy, setStrategy] = useState<string>('standard');
   const [brandName, setBrandName] = useState<string>('');
+  const [inputType, setInputType] = useState<'physical_package' | 'ecommerce_listing'>('physical_package');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -108,7 +111,7 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
   // Trigger Analysis
   const handleAnalyze = async () => {
     if (!selectedFile && !previewUrl) {
-      setError('Please upload an image or capture a package scan first.');
+      setError('Please upload an image or capture a scan first.');
       return;
     }
 
@@ -128,13 +131,14 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
         preprocessing_strategy: strategy,
         brand_name: brandName.trim() || undefined,
         persist: true,
+        input_type: inputType,
       });
 
       onScanComplete(response, previewUrl || '');
     } catch (err: any) {
       setError(
         err?.response?.data?.detail ||
-          'Analysis failed. Ensure the image is a clear package declaration image and try again.'
+          'Analysis failed. Ensure the image is a clear package or product listing image and try again.'
       );
     } finally {
       setIsAnalyzing(false);
@@ -147,15 +151,44 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
       <div className="text-center space-y-2">
         <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-300 text-xs font-semibold">
           <Sparkles className="w-3.5 h-3.5" />
-          <span>Multi-Engine OCR Ensemble • Orientation Correction • DINOv2 Authenticity</span>
+          <span>Multi-Engine OCR Ensemble • Physical Packages & E-Commerce Listing Support</span>
         </div>
         <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white font-display">
-          Statutory Package Compliance Scanner
+          Statutory Compliance Inspection Scanner
         </h1>
         <p className="text-sm text-slate-400 max-w-2xl mx-auto">
-          Capture or upload pre-packaged commodity labels. The engine validates statutory declarations against 
+          Capture physical packaged commodity labels or upload e-commerce listing screenshots. The engine validates statutory declarations against 
           the <span className="text-brand-300 font-semibold">Legal Metrology (Packaged Commodities) Rules, 2011</span> and official DoCA gazettes.
         </p>
+      </div>
+
+      {/* Mode Selector Toggle */}
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-3 bg-slate-900/90 p-2 rounded-2xl border border-slate-800 max-w-xl mx-auto shadow-inner">
+        <button
+          type="button"
+          onClick={() => setInputType('physical_package')}
+          className={`flex-1 w-full py-2.5 px-4 rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center space-x-2 transition-all ${
+            inputType === 'physical_package'
+              ? 'bg-brand-600 text-white shadow-glow'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+          }`}
+        >
+          <Package className="w-4 h-4" />
+          <span>Scan Physical Package</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setInputType('ecommerce_listing')}
+          className={`flex-1 w-full py-2.5 px-4 rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center space-x-2 transition-all ${
+            inputType === 'ecommerce_listing'
+              ? 'bg-amber-600 text-white shadow-glow'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+          }`}
+        >
+          <ShoppingBag className="w-4 h-4" />
+          <span>Analyse E-commerce Listing</span>
+        </button>
       </div>
 
       {/* Main Scanner Container */}

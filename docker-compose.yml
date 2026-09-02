@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: legalmetrix-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: legal_metrology
+      POSTGRES_USER: legal_admin
+      POSTGRES_PASSWORD: legal_secure_password_2026!
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U legal_admin -d legal_metrology"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: legalmetrix-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: legalmetrix-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://legal_admin:legal_secure_password_2026!@postgres:5432/legal_metrology
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=production
+      - OCR_ENGINE=paddle
+      - DINO_MODEL_NAME=facebook/dinov2-base
+      - HF_HOME=/app/model_cache
+      - PADDLE_HOME=/app/model_cache/paddle
+      - MAX_UPLOAD_SIZE_MB=25
+      - ALLOWED_ORIGINS=http://localhost,http://localhost:80
+    volumes:
+      - backend_uploads:/app/uploads
+      - model_cache:/app/model_cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: legalmetrix-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_uploads:
+    driver: local
+  model_cache:
+    driver: local

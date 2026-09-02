@@ -5,6 +5,7 @@ import numpy as np
 from pydantic import BaseModel, Field
 
 from app.vision.bbox_utils import BBoxUtils
+from app.constants import FONT_SIZE_DISCLAIMER
 
 logger = logging.getLogger(__name__)
 
@@ -129,5 +130,5 @@ class ReadabilityAnalyzer:
             "ocr_confidence": round(confidence, 3),
             "sharpness_score": round(sharpness, 1),
             "reason": reason_str,
-            "disclaimer": "Readability metrics are automated screening estimates based on image resolution and do not represent statutory physical millimeter measurements."
+            "disclaimer": FONT_SIZE_DISCLAIMER
         }

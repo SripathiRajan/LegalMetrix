@@ -166,18 +166,48 @@ class RulesKnowledgeBase:
         if self.model is not None and self.corpus_embeddings is not None:
             try:
                 query_emb = self.model.encode([query], convert_to_numpy=True, normalize_embeddings=True)
-                scores = np.dot(self.corpus_embeddings, query_emb.T).squeeze(axis=1)
-                top_indices = np.argsort(scores)[::-1][:top_k]
+                raw_scores = np.dot(self.corpus_embeddings, query_emb.T).squeeze(axis=1)
+
+                adjusted_scores = raw_scores.copy()
+                query_lower = query.lower()
+
+                for idx, item in enumerate(self.corpus):
+                    # Priority boost for structured rules vs raw document excerpts
+                    if item.get("type") == "rule":
+                        adjusted_scores[idx] += 0.15
+
+                    # Citation and field name keyword matching boost
+                    ref = (item.get("official_legal_reference") or "").lower()
+                    rule_id = (item.get("rule_id") or "").lower()
+                    decl = (item.get("declaration_name") or "").lower()
+
+                    # Exact rule citation match (e.g. 6(1)(a), 6(1)(e))
+                    citations = re.findall(r'6\s*\(\s*1\s*\)\s*\(\s*[a-g|da]+\s*\)', query_lower)
+                    for c in citations:
+                        clean_c = c.replace(" ", "")
+                        if clean_c in ref.replace(" ", "") or clean_c in rule_id:
+                            adjusted_scores[idx] += 0.30
+
+                    # Common key terms
+                    if "mrp" in query_lower and ("mrp" in decl or "mrp" in ref or "6_1_e" in rule_id):
+                        adjusted_scores[idx] += 0.20
+                    if "manufacturer" in query_lower and ("manufacturer" in decl or "6_1_a" in rule_id):
+                        adjusted_scores[idx] += 0.20
+                    if ("net quantity" in query_lower or "quantity" in query_lower) and ("quantity" in decl or "6_1_c" in rule_id):
+                        adjusted_scores[idx] += 0.20
+
+                top_indices = np.argsort(adjusted_scores)[::-1][:top_k]
 
                 results = []
                 for idx in top_indices:
                     item = self.corpus[idx].copy()
-                    item["score"] = float(round(scores[idx], 4))
+                    item["score"] = float(round(adjusted_scores[idx], 4))
                     item.pop("search_text", None)
                     results.append(item)
                 return results
             except Exception as e:
                 print(f"Vector search error ({e}), falling back to keyword search.")
+
 
         # Fallback keyword-based similarity search
         return self._keyword_search(query, top_k=top_k)

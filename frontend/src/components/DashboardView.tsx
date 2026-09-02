@@ -10,7 +10,8 @@ import {
   RefreshCw, 
   AlertOctagon,
   Sparkles,
-  Type
+  Type,
+  FileSpreadsheet
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -23,12 +24,13 @@ import {
   Line, 
   CartesianGrid
 } from 'recharts';
-import { statsApi } from '../services/api';
+import { statsApi, scanApi } from '../services/api';
 import type { DashboardStatistics } from '../types/api';
 
 export const DashboardView: React.FC = () => {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [isExporting, setIsExporting] = useState<boolean>(false);
 
   const { data: stats, isLoading, refetch, isError } = useQuery<DashboardStatistics>({
     queryKey: ['dashboardStats', startDate, endDate],
@@ -76,6 +78,26 @@ export const DashboardView: React.FC = () => {
     { name: '> 24px (Headline)', count: font_size_distribution.greater_than_24px, fill: '#6366f1' },
   ];
 
+  const handleBulkExport = async () => {
+    try {
+      setIsExporting(true);
+      const blob = await scanApi.downloadBulkXlsxBlob({ limit: 1000 });
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `LegalMetrology_Compliance_Analytics_Export_${timestamp}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch {
+      alert('Failed to download bulk scans Excel workbook.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="w-full max-w-7xl mx-auto space-y-6 animate-fade-in pb-12">
       {/* Header & Date Filters */}
@@ -92,35 +114,53 @@ export const DashboardView: React.FC = () => {
           </p>
         </div>
 
-        {/* Date Filter Inputs */}
-        <div className="flex items-center space-x-2 bg-slate-900/80 p-2 rounded-xl border border-slate-800 text-xs">
-          <div className="flex items-center space-x-1.5">
-            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+        {/* Action Controls: Date Filters & Bulk Export */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Date Filter Inputs */}
+          <div className="flex items-center space-x-2 bg-slate-900/80 p-2 rounded-xl border border-slate-800 text-xs">
+            <div className="flex items-center space-x-1.5">
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 focus:outline-none focus:border-brand-500"
+              />
+            </div>
+            <span className="text-slate-500">to</span>
             <input
               type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
               className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 focus:outline-none focus:border-brand-500"
             />
+            {(startDate || endDate) && (
+              <button
+                onClick={() => {
+                  setStartDate('');
+                  setEndDate('');
+                }}
+                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px]"
+              >
+                Clear
+              </button>
+            )}
           </div>
-          <span className="text-slate-500">to</span>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 focus:outline-none focus:border-brand-500"
-          />
-          {(startDate || endDate) && (
-            <button
-              onClick={() => {
-                setStartDate('');
-                setEndDate('');
-              }}
-              className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px]"
-            >
-              Clear
-            </button>
-          )}
+
+          {/* Bulk Export Button */}
+          <button
+            onClick={handleBulkExport}
+            disabled={isExporting}
+            className="flex items-center space-x-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-semibold shadow transition-all active:scale-95 disabled:opacity-50"
+            title="Download all historical scans into a formatted Excel workbook"
+          >
+            {isExporting ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+            <span>Bulk Export (Excel)</span>
+          </button>
         </div>
       </div>
 
@@ -319,6 +359,14 @@ export const DashboardView: React.FC = () => {
             </ResponsiveContainer>
           </div>
         </div>
+      </div>
+
+      {/* Permanent DoCA Legal Grounding Footer Info Card */}
+      <div className="pt-4 border-t border-slate-800/80 text-center">
+        <p className="text-xs text-slate-400 font-medium inline-flex items-center justify-center space-x-2 bg-slate-900/80 px-4 py-2 rounded-full border border-slate-800">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Powered by Official Legal Metrology (Packaged Commodities) Rules, 2011 and amendments issued by Department of Consumer Affairs</span>
+        </p>
       </div>
     </div>
   );

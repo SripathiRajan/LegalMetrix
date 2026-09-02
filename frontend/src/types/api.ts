@@ -33,6 +33,7 @@ export interface ComplianceResponse {
   summary: string;
   timestamp: string;
   is_imported: boolean;
+  input_type?: string;
 }
 
 export interface EvidenceBoundingBox {

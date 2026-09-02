@@ -4,6 +4,11 @@ Problem Statement 26034: *Software System to check compliance of Packaged Commod
 
 This backend system implements a modular, declarative Legal Metrology compliance rule engine, PaddleOCR declaration extraction pipeline, and Computer Vision Evidence & Readability analysis built with FastAPI, OpenCV, and Pydantic.
 
+### 📦 Dual Inspection Modes
+- **Primary Mode (`input_type=physical_package`)**: Physical packaged commodity camera photo / label scan. Validates statutory declarations, physical font height legibility, and panel placement.
+- **Secondary Mode (`input_type=ecommerce_listing`)**: E-commerce marketplace product listing screenshot. Runs full OCR + declaration extraction + statutory rule verification (MRP, Net Qty, Dates, Manufacturer, Consumer Care, COO), while setting physical package dimension checks to *Not Applicable / Informational*.
+- **Future Readiness**: Architecture is ready for automated e-commerce web crawler ingestion, multi-carousel listing image parsing, and deep marketplace compliance tracking.
+
 ---
 
 ## 🏛️ Legal Source of Truth & Grounding on Official DoCA Dataset
@@ -145,3 +150,21 @@ Uploads a package image and returns spatial placement, readability analysis, and
 
 ### 4. Full End-to-End Analysis: `POST /api/analyze`
 Processes uploaded image through preprocessing, OCR, declaration extraction, visual evidence linking, compliance rule verification, and annotated evidence generation in a single request.
+
+---
+
+## 📋 Compliance with Problem Statement Requirements
+
+This system directly addresses **Problem Statement 26034**: *Software System to check compliance of Packaged Commodities under Legal Metrology (Packaged Commodities) Rules, 2011.*
+
+| Problem Statement Requirement | System Implementation & Solution Architecture | Status |
+|---|---|---|
+| **1. Automatic OCR & Declaration Extraction** | Multi-engine OCR ensemble (PaddleOCR + preprocessing + heuristic fallback) extracting mandatory declarations: MRP, Net Qty, Dates, Manufacturer, Consumer Care, COO, USP, and Ingredients. | **Fully Implemented** |
+| **2. Statutory Rule Engine & Legal Grounding** | Rule engine grounded directly on 40 official DoCA PDFs, PCR 2011, and gazette amendments. Provides exact legal citations, source PDF filenames, and bilingual rule text for every check. | **Fully Implemented** |
+| **3. Physical Package & E-Commerce Listing Support** | Dual inspection modes selectable side-by-side: **"Scan Physical Package"** (validates physical font height, PDP placement, declarations) and **"Analyse E-commerce Listing"** (validates digital marketplace declarations, COO filter guidelines). | **Fully Implemented** |
+| **4. Visual Bounding Box Evidence & Readability Assessment** | Bounding box normalization, spatial PDP quadrant placement, Laplacian sharpness scoring, and color-coded visual evidence (Green = Pass, Red = Infraction). | **Fully Implemented** |
+| **5. Multi-Format Audit Reports (PDF + Editable Formats)** | Generates official PDF Audit Reports (with per-page legal disclaimers and visual evidence) as well as editable formats: Excel (.xlsx with summary, extracted fields, rule results, visual statistics, and legal disclaimer sheets), DOCX Show-Cause Notice Drafts, and CSV. | **Fully Implemented** |
+| **6. Inspector Dashboard & Violation Log Repository** | Responsive Web Application with executive compliance gauges, KPI counters, rule-by-rule filtering, historical scan database, brand authenticity tracking, and bulk Excel export. | **Fully Implemented** |
+| **7. Statutory Measurement & Screening Disclaimer** | Standardized, automated screening disclaimer enforced across constants, PDF report footers, Excel sheets, DOCX drafts, frontend UI, and API response metadata under Legal Metrology Act, 2009. | **Fully Implemented** |
+| **8. Multi-Lingual & DINOv2 Brand Trade Dress Authenticity** | Handles Hindi & English statutory declarations; integrates DINOv2 visual embedding similarity for trade dress authenticity and anti-counterfeiting verification. | **Fully Implemented** |
+
