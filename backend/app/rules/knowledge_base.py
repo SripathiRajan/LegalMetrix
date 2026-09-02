@@ -182,25 +182,74 @@ class RulesKnowledgeBase:
         # Fallback keyword-based similarity search
         return self._keyword_search(query, top_k=top_k)
 
+    STOPWORDS = {
+        "what", "is", "the", "for", "of", "and", "in", "to", "a", "an", "on", "are",
+        "tell", "me", "about", "how", "who", "write", "best", "current", "list", "do",
+        "does", "with", "from", "as", "by", "under", "can", "you", "my", "our", "all",
+        "any", "requirements", "requirement", "please", "script", "mandatory",
+        "declaration", "declarations", "provisions", "provision", "rules", "rule"
+    }
+
     def _keyword_search(self, query: str, top_k: int = 3) -> List[Dict[str, Any]]:
         """Fallback keyword search when embeddings are unavailable."""
-        query_words = set(re.findall(r'\w+', query.lower()))
+        raw_words = re.findall(r'[\w\u0900-\u097F]+', query.lower())
+        content_words = [w for w in raw_words if w not in self.STOPWORDS and len(w) > 1]
+        
+        # If all words were stopwords, fallback to non-stopword tokens of length > 2
+        if not content_words:
+            content_words = [w for w in raw_words if len(w) > 2]
+            if not content_words:
+                return []
+
         scores = []
-
         for item in self.corpus:
-            text_words = set(re.findall(r'\w+', item["search_text"].lower()))
-            overlap = len(query_words.intersection(text_words))
-            score = overlap / (len(query_words) + 1e-5)
-            scores.append(score)
+            decl = (item.get("declaration_name") or "").lower()
+            rule_id = (item.get("rule_id") or "").lower()
+            legal_ref = (item.get("official_legal_reference") or "").lower()
+            search_txt = (item.get("search_text") or "").lower()
+            hindi_txt = (item.get("hindi_text_snippet") or "").lower()
 
-        top_indices = np.argsort(scores)[::-1][:top_k]
+            decl_words = set(re.findall(r'[\w\u0900-\u097F]+', decl))
+            rule_id_words = set(re.findall(r'[\w\u0900-\u097F]+', rule_id))
+            legal_ref_words = set(re.findall(r'[\w\u0900-\u097F]+', legal_ref))
+            hindi_words = set(re.findall(r'[\w\u0900-\u097F]+', hindi_txt))
+
+            item_score = 0.0
+            for w in content_words:
+                if w in decl_words:
+                    item_score += 10.0
+                elif w in hindi_words or w in hindi_txt:
+                    item_score += 10.0
+                elif w in rule_id_words or w in rule_id:
+                    item_score += 8.0
+                elif w in legal_ref_words or w in legal_ref:
+                    item_score += 4.0
+                elif w in search_txt:
+                    item_score += 2.0
+
+            # Normalize score
+            normalized_score = item_score / (len(content_words) * 10.0 + 1e-5)
+            scores.append(normalized_score)
+
+
+        # Filter zero-score entries
+        scored_pairs = [(idx, score) for idx, score in enumerate(scores) if score > 0.0]
+        if not scored_pairs:
+            return []
+
+        # Sort descending
+        scored_pairs.sort(key=lambda x: x[1], reverse=True)
+        top_pairs = scored_pairs[:top_k]
+
         results = []
-        for idx in top_indices:
+        for idx, score in top_pairs:
             item = self.corpus[idx].copy()
-            item["score"] = float(round(scores[idx], 4))
+            item["score"] = float(round(min(1.0, score), 4))
             item.pop("search_text", None)
             results.append(item)
         return results
+
+
 
 
 def get_rules_knowledge_base() -> RulesKnowledgeBase:

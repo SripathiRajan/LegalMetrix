@@ -128,3 +128,34 @@ class BBoxUtils:
         max_y = max(b[3] for b in xyxy_list)
 
         return [round(min_x, 1), round(min_y, 1), round(max_x, 1), round(max_y, 1)]
+
+    @staticmethod
+    def calculate_iou(
+        bbox1: Union[List[List[float]], List[float]],
+        bbox2: Union[List[List[float]], List[float]]
+    ) -> float:
+        """
+        Calculates the Intersection over Union (IoU) between two bounding boxes.
+        Accepts both 4-point polygon format [[x1,y1],[x2,y2],[x3,y3],[x4,y4]] and [xmin, ymin, xmax, ymax].
+        """
+        b1 = BBoxUtils.to_xyxy(bbox1)
+        b2 = BBoxUtils.to_xyxy(bbox2)
+
+        x_left = max(b1[0], b2[0])
+        y_top = max(b1[1], b2[1])
+        x_right = min(b1[2], b2[2])
+        y_bottom = min(b1[3], b2[3])
+
+        if x_right <= x_left or y_bottom <= y_top:
+            return 0.0
+
+        intersection_area = (x_right - x_left) * (y_bottom - y_top)
+        area1 = (b1[2] - b1[0]) * (b1[3] - b1[1])
+        area2 = (b2[2] - b2[0]) * (b2[3] - b2[1])
+        union_area = area1 + area2 - intersection_area
+
+        if union_area <= 0.0:
+            return 0.0
+
+        return float(intersection_area / union_area)
+

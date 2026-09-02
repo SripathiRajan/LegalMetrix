@@ -139,3 +139,66 @@ def test_api_analyze_end_to_end(monkeypatch):
     assert data["compliance_result"]["overall_status"] == OverallComplianceStatus.COMPLIANT
     assert data["compliance_result"]["compliance_score"] == 100.0
     assert data["compliance_result"]["failed"] == 0
+
+
+# 6. Test POST /api/ocr/extract endpoint with use_ensemble=true
+def test_api_ocr_extract_with_ensemble(monkeypatch):
+    mock_ocr = MockOCREngine(OCRResult(
+        raw_text="ABC Biscuits\nMRP Rs. 50 (incl. of all taxes)\nNet Qty: 100 g\nCountry of Origin: India",
+        regions=[
+            OCRRegion(text="ABC Biscuits", confidence=0.98, bounding_box=[[0, 0], [10, 0], [10, 10], [0, 10]]),
+            OCRRegion(text="MRP Rs. 50 (incl. of all taxes)", confidence=0.95, bounding_box=[[0, 20], [10, 20], [10, 30], [0, 30]]),
+            OCRRegion(text="Net Qty: 100 g", confidence=0.97, bounding_box=[[0, 40], [10, 40], [10, 50], [0, 50]]),
+            OCRRegion(text="Country of Origin: India", confidence=0.99, bounding_box=[[0, 120], [10, 120], [10, 130], [0, 130]])
+        ],
+        average_confidence=0.97
+    ))
+
+    from app import main
+    monkeypatch.setattr(main.compliance_service, "ocr_engine", mock_ocr)
+
+    img_bytes = create_dummy_image_bytes()
+    resp = client.post(
+        "/api/ocr/extract?use_ensemble=true",
+        files={"file": ("label.png", io.BytesIO(img_bytes), "image/png")}
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "ABC Biscuits" in data["ocr_text"]
+    assert data["fields"]["mrp"]["is_detected"]
+    assert data["fields"]["country_of_origin"]["value"] == "India"
+
+
+# 7. Test POST /api/analyze endpoint with use_ensemble=true
+def test_api_analyze_with_ensemble(monkeypatch):
+    mock_ocr = MockOCREngine(OCRResult(
+        raw_text="Healthy Oats\nMRP ₹120.00 incl. of all taxes\nNet Wt: 500 g\nMfd: 04/2026\nManufactured by: Oats India Ltd, Jaipur, Rajasthan 302001\nCustomer Care: 1800-333-4444 help@oatsindia.com\nMade in India",
+        regions=[
+            OCRRegion(text="Healthy Oats", confidence=0.98, bounding_box=[[0, 0], [10, 0], [10, 10], [0, 10]]),
+            OCRRegion(text="MRP ₹120.00 incl. of all taxes", confidence=0.96, bounding_box=[[0, 20], [10, 20], [10, 30], [0, 30]]),
+            OCRRegion(text="Net Wt: 500 g", confidence=0.97, bounding_box=[[0, 40], [10, 40], [10, 50], [0, 50]]),
+            OCRRegion(text="Mfd: 04/2026", confidence=0.95, bounding_box=[[0, 60], [10, 60], [10, 70], [0, 70]]),
+            OCRRegion(text="Manufactured by: Oats India Ltd, Jaipur, Rajasthan 302001", confidence=0.95, bounding_box=[[0, 80], [10, 80], [10, 90], [0, 90]]),
+            OCRRegion(text="Customer Care: 1800-333-4444 help@oatsindia.com", confidence=0.96, bounding_box=[[0, 100], [10, 100], [10, 110], [0, 110]]),
+            OCRRegion(text="Made in India", confidence=0.98, bounding_box=[[0, 120], [10, 120], [10, 130], [0, 130]])
+        ],
+        average_confidence=0.964
+    ))
+
+    from app import main
+    monkeypatch.setattr(main.compliance_service, "ocr_engine", mock_ocr)
+
+    img_bytes = create_dummy_image_bytes()
+    resp = client.post(
+        "/api/analyze?use_ensemble=true&multi_pass=false",
+        files={"file": ("oats.png", io.BytesIO(img_bytes), "image/png")}
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "extracted_data" in data
+    assert "compliance_result" in data
+    assert data["compliance_result"]["overall_status"] == OverallComplianceStatus.COMPLIANT
+    assert data["compliance_result"]["compliance_score"] == 100.0
+

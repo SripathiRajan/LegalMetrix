@@ -119,3 +119,173 @@ class MockOCREngine(BaseOCREngine):
             average_confidence=0.96,
             preprocessing_applied=["standard", "clahe_contrast"]
         )
+
+
+class EasyOCREngine(BaseOCREngine):
+    """
+    EasyOCR implementation with lazy loading and fallback handling.
+    Supports multilingual text detection and extraction using deep learning CRNN models.
+    """
+
+    def __init__(self, languages: Optional[List[str]] = None, gpu: bool = False):
+        self.languages = languages or ["en"]
+        self.gpu = gpu
+        self.ocr_instance = None
+        self._initialize_engine()
+
+    def _initialize_engine(self):
+        try:
+            import easyocr
+            logger.info("Initializing EasyOCR engine...")
+            self.ocr_instance = easyocr.Reader(self.languages, gpu=self.gpu)
+            logger.info("EasyOCR engine initialized successfully.")
+        except Exception as e:
+            logger.warning(f"EasyOCR not initialized ({str(e)}). Running in fallback/mock mode.")
+            self.ocr_instance = None
+
+    def extract_text(self, image: Any) -> OCRResult:
+        if self.ocr_instance is None:
+            # Fallback when running in environments without EasyOCR dependencies
+            return OCRResult(
+                raw_text="",
+                regions=[],
+                average_confidence=0.0,
+                preprocessing_applied=[]
+            )
+
+        try:
+            ocr_output = self.ocr_instance.readtext(image)
+
+            regions: List[OCRRegion] = []
+            extracted_lines: List[str] = []
+            confidences: List[float] = []
+
+            if ocr_output:
+                for line_data in ocr_output:
+                    # line_data format: (bbox, text, confidence)
+                    # bbox: [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
+                    bbox, text, conf = line_data
+                    text_str = str(text).strip()
+                    if not text_str:
+                        continue
+
+                    if isinstance(bbox[0], (list, tuple)):
+                        bbox_list = [[float(p[0]), float(p[1])] for p in bbox]
+                    else:
+                        bbox_list = [float(x) for x in bbox]
+
+                    conf_val = float(conf)
+
+                    regions.append(OCRRegion(
+                        text=text_str,
+                        confidence=round(conf_val, 4),
+                        bounding_box=bbox_list
+                    ))
+                    extracted_lines.append(text_str)
+                    confidences.append(conf_val)
+
+            avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
+            full_text = "\n".join(extracted_lines)
+
+            return OCRResult(
+                raw_text=full_text,
+                regions=regions,
+                average_confidence=round(avg_conf, 3),
+                preprocessing_applied=[]
+            )
+        except Exception as e:
+            logger.error(f"Error executing EasyOCR: {str(e)}")
+            raise RuntimeError(f"EasyOCR extraction failed: {str(e)}")
+
+
+class TesseractOCREngine(BaseOCREngine):
+    """
+    Tesseract OCR implementation (via pytesseract) with lazy loading and fallback handling.
+    """
+
+    def __init__(self, lang: str = "eng", config: str = "--oem 3 --psm 6"):
+        self.lang = lang
+        self.config = config
+        self.ocr_instance = None
+        self._initialize_engine()
+
+    def _initialize_engine(self):
+        try:
+            import pytesseract
+            logger.info("Initializing Tesseract OCR engine...")
+            self.ocr_instance = pytesseract
+            logger.info("Tesseract OCR engine initialized successfully.")
+        except Exception as e:
+            logger.warning(f"Tesseract OCR not initialized ({str(e)}). Running in fallback/mock mode.")
+            self.ocr_instance = None
+
+    def extract_text(self, image: Any) -> OCRResult:
+        if self.ocr_instance is None:
+            # Fallback when running in environments without pytesseract/Tesseract installed
+            return OCRResult(
+                raw_text="",
+                regions=[],
+                average_confidence=0.0,
+                preprocessing_applied=[]
+            )
+
+        try:
+            data = self.ocr_instance.image_to_data(
+                image,
+                lang=self.lang,
+                config=self.config,
+                output_type=self.ocr_instance.Output.DICT
+            )
+
+            regions: List[OCRRegion] = []
+            extracted_lines: List[str] = []
+            confidences: List[float] = []
+
+            n_boxes = len(data.get("text", []))
+            for i in range(n_boxes):
+                text = str(data["text"][i]).strip()
+                conf_val = data["conf"][i]
+                try:
+                    conf_float = float(conf_val)
+                except (ValueError, TypeError):
+                    conf_float = -1.0
+
+                # Tesseract returns conf = -1 for structure blocks / empty strings
+                if not text or conf_float < 0:
+                    continue
+
+                # Normalize confidence from 0-100 to 0.0-1.0
+                norm_conf = min(1.0, max(0.0, conf_float / 100.0))
+
+                x = float(data["left"][i])
+                y = float(data["top"][i])
+                w = float(data["width"][i])
+                h = float(data["height"][i])
+                bbox = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
+
+                regions.append(OCRRegion(
+                    text=text,
+                    confidence=round(norm_conf, 4),
+                    bounding_box=bbox
+                ))
+                extracted_lines.append(text)
+                confidences.append(norm_conf)
+
+            avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
+            full_text = "\n".join(extracted_lines)
+
+            return OCRResult(
+                raw_text=full_text,
+                regions=regions,
+                average_confidence=round(avg_conf, 3),
+                preprocessing_applied=[]
+            )
+        except Exception as e:
+            logger.warning(f"Tesseract OCR execution failed ({str(e)}). Returning empty fallback.")
+            return OCRResult(
+                raw_text="",
+                regions=[],
+                average_confidence=0.0,
+                preprocessing_applied=[]
+            )
+

@@ -1,7 +1,9 @@
+from enum import Enum
 from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel, Field
 from app.models.product import ProductInput, ComplianceResponse
 from app.vision.evidence import VisualEvidence
+
 
 
 class OCRRegion(BaseModel):
@@ -14,6 +16,21 @@ class OCRRegion(BaseModel):
         default_factory=list,
         description="Bounding box coordinates, e.g. [[x1, y1], [x2, y2], [x3, y3], [x4, y4]] or [x1, y1, x2, y2]"
     )
+    detected_angle_degrees: Optional[float] = Field(
+        default=None,
+        description="Estimated rotation angle of the text polygon in degrees"
+    )
+    cluster_id: Optional[str] = Field(
+        default=None,
+        description="Logical spatial/quadrant cluster identifier"
+    )
+    reading_order_confidence: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score for the reading order assignment"
+    )
+
 
 
 class OCRResult(BaseModel):
@@ -124,6 +141,29 @@ class VisionAnalysisResponse(BaseModel):
     annotated_image: Optional[str] = None
 
 
+class AuthenticityVerdict(str, Enum):
+    """
+    Categorical verdict evaluating brand packaging visual authenticity.
+    """
+    GENUINE_LIKELY = "GENUINE_LIKELY"
+    SUSPICIOUS = "SUSPICIOUS"
+    NO_REFERENCE_AVAILABLE = "NO_REFERENCE_AVAILABLE"
+
+
+class AuthenticityResult(BaseModel):
+    """
+    Outcome of DINOv2 visual embedding and brand packaging authenticity verification.
+    """
+    similarity_score: float = Field(..., description="Cosine similarity score against reference brand embedding (0.0 to 1.0)")
+    verdict: AuthenticityVerdict = Field(..., description="Authenticity evaluation verdict")
+    threshold_used: float = Field(default=0.80, description="Cosine similarity threshold for genuine classification")
+    color_similarity: Optional[float] = Field(default=None, description="Dominant color palette similarity score (0.0 to 1.0)")
+    notes: str = Field(default="", description="Explanatory diagnosis or mismatch details")
+    brand_name: Optional[str] = Field(default=None, description="Brand name evaluated")
+    dominant_palette: List[List[int]] = Field(default_factory=list, description="Extracted RGB dominant color palette (k=5)")
+    font_height_ratio: Optional[float] = Field(default=None, description="Logo/text relative height ratio")
+
+
 class AnalyzeResponse(BaseModel):
     """
     Response model for POST /api/analyze (Full pipeline end-to-end with visual evidence)
@@ -132,3 +172,30 @@ class AnalyzeResponse(BaseModel):
     compliance_result: ComplianceResponse
     ocr_summary: Dict[str, Any]
     annotated_image: Optional[str] = None
+    scan_id: Optional[int] = None
+    authenticity_result: Optional[AuthenticityResult] = None
+    visual_evidence: Optional[Dict[str, Any]] = None
+
+
+
+class SelectedFrameMetadata(BaseModel):
+    """
+    Diagnostic metadata for an analyzed video keyframe.
+    """
+    frame_index: int
+    timestamp_seconds: float
+    sharpness_score: float
+    regions_detected: int = 0
+
+
+class AnalyzeVideoResponse(BaseModel):
+    """
+    Response model for POST /api/analyze/video
+    """
+    compliance_result: ComplianceResponse
+    selected_frames: List[SelectedFrameMetadata]
+    ocr_summary: Dict[str, Any]
+    annotated_image: Optional[str] = None
+    extracted_data: ExtractedProductData
+
+
