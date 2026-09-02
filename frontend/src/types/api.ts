@@ -195,6 +195,11 @@ export interface AnalyzeScanResponse {
   visual_evidence?: VisualEvidence | null;
   authenticity_result?: AuthenticityResult | null;
   scan_id?: number | null;
+  annotated_image?: string | null;
+  annotated_images?: string[] | null;
+  images_processed?: number | null;
+  field_sources?: Record<string, number> | null;
+  per_image_summary?: Array<Record<string, any>> | null;
   ocr_summary?: {
     regions_count: number;
     average_confidence: number;

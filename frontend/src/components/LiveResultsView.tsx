@@ -34,6 +34,7 @@ export const LiveResultsView: React.FC<LiveResultsViewProps> = ({
 }) => {
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'FAIL' | 'WARNING' | 'PASS'>('ALL');
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [selectedPanelIndex, setSelectedPanelIndex] = useState<number>(0);
 
   const { compliance_result, visual_evidence, authenticity_result, scan_id, ocr_summary } = result;
   const isCompliant = compliance_result.overall_status === 'COMPLIANT';
@@ -121,10 +122,29 @@ export const LiveResultsView: React.FC<LiveResultsViewProps> = ({
     }
   };
 
-  // Image source priority: Base64 annotated image -> Original preview
-  const displayImage = visual_evidence?.annotated_image_base64
-    ? `data:image/jpeg;base64,${visual_evidence.annotated_image_base64}`
-    : originalImageSrc;
+  // Format base64 image URI safely without duplicating data:image/jpeg;base64,
+  const formatImageSrc = (src?: string) => {
+    if (!src) return '';
+    if (src.startsWith('data:') || src.startsWith('http://') || src.startsWith('https://') || src.startsWith('blob:')) {
+      return src;
+    }
+    return `data:image/jpeg;base64,${src}`;
+  };
+
+  // Collect available images (multi-panel or single image)
+  const rawImages: string[] = [];
+  if (result.annotated_images && result.annotated_images.length > 0) {
+    rawImages.push(...result.annotated_images);
+  } else if (result.annotated_image) {
+    rawImages.push(result.annotated_image);
+  } else if (visual_evidence?.annotated_image_base64) {
+    rawImages.push(visual_evidence.annotated_image_base64);
+  } else if (originalImageSrc) {
+    rawImages.push(originalImageSrc);
+  }
+
+  const availableImages = rawImages.map(formatImageSrc).filter(Boolean);
+  const displayImage = availableImages[selectedPanelIndex] || availableImages[0] || originalImageSrc;
 
   return (
     <div className="w-full max-w-6xl mx-auto space-y-6 animate-fade-in">
@@ -373,6 +393,24 @@ export const LiveResultsView: React.FC<LiveResultsViewProps> = ({
               </span>
             )}
           </div>
+
+          {availableImages.length > 1 && (
+            <div className="flex items-center space-x-2 overflow-x-auto pb-1">
+              {availableImages.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setSelectedPanelIndex(idx)}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                    selectedPanelIndex === idx
+                      ? 'bg-brand-600 text-white shadow-glow'
+                      : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Panel #{idx + 1}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="relative w-full h-[400px] rounded-xl overflow-hidden bg-slate-950 border border-slate-800 flex items-center justify-center">
             <img
