@@ -28,6 +28,7 @@ from app.db.models import Officer
 from app.auth import (
     auth_router,
     get_current_active_officer,
+    get_optional_current_officer,
     ChatbotQueryRequest,
     ChatbotQueryResponse
 )
@@ -699,7 +700,7 @@ def get_dashboard_statistics(
 def download_scan_pdf_report(
     scan_id: int,
     db: Session = Depends(get_db),
-    current_officer: Officer = Depends(get_current_active_officer)
+    current_officer: Optional[Officer] = Depends(get_optional_current_officer)
 ):
     record = compliance_service.history_service.get_scan_by_id(scan_id=scan_id, db=db)
     if not record:
@@ -746,7 +747,7 @@ def download_scan_pdf_report(
 def export_scan_csv(
     scan_id: int,
     db: Session = Depends(get_db),
-    current_officer: Officer = Depends(get_current_active_officer)
+    current_officer: Optional[Officer] = Depends(get_optional_current_officer)
 ):
     record = compliance_service.history_service.get_scan_by_id(scan_id=scan_id, db=db)
     if not record:
@@ -782,7 +783,7 @@ def export_scan_csv(
 def export_scan_xlsx(
     scan_id: int,
     db: Session = Depends(get_db),
-    current_officer: Officer = Depends(get_current_active_officer)
+    current_officer: Optional[Officer] = Depends(get_optional_current_officer)
 ):
     record = compliance_service.history_service.get_scan_by_id(scan_id=scan_id, db=db)
     if not record:
@@ -818,7 +819,7 @@ def export_scan_xlsx(
 def export_scan_docx(
     scan_id: int,
     db: Session = Depends(get_db),
-    current_officer: Officer = Depends(get_current_active_officer)
+    current_officer: Optional[Officer] = Depends(get_optional_current_officer)
 ):
     record = compliance_service.history_service.get_scan_by_id(scan_id=scan_id, db=db)
     if not record:

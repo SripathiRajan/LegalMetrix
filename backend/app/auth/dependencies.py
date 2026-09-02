@@ -78,3 +78,30 @@ def require_roles(allowed_roles: List[str]) -> Callable:
 
 
 require_admin = require_roles(["admin"])
+
+
+oauth2_scheme_optional = OAuth2PasswordBearer(
+    tokenUrl="/api/auth/login",
+    auto_error=False,
+    description="Optional JWT Bearer token"
+)
+
+
+def get_optional_current_officer(
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+    db: Session = Depends(get_db)
+) -> Optional[Officer]:
+    """
+    Returns the authenticated Officer if a valid Bearer token is provided, or None if anonymous.
+    """
+    if not token:
+        return None
+    try:
+        payload = decode_access_token(token)
+        username: Optional[str] = payload.get("sub")
+        if username is None:
+            return None
+        return db.query(Officer).filter(Officer.username == username, Officer.is_active == True).first()
+    except Exception:
+        return None
+

@@ -16,6 +16,7 @@ from app.auth.security import (
 from app.auth.dependencies import (
     get_current_officer,
     get_current_active_officer,
+    get_optional_current_officer,
     require_roles,
     require_admin,
     oauth2_scheme
@@ -36,6 +37,7 @@ __all__ = [
     "decode_access_token",
     "get_current_officer",
     "get_current_active_officer",
+    "get_optional_current_officer",
     "require_roles",
     "require_admin",
     "oauth2_scheme",
