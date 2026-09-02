@@ -9,11 +9,12 @@ MRP_PATTERNS: List[Pattern] = [
     re.compile(r'(?:m\.?r\.?p\.?|max(?:imum)?\s*retail\s*price|mrp)\s*[:\-\.]?\s*(?:rs\.?|inr|₹)?\s*([0-9]{1,4}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)', re.IGNORECASE),
     re.compile(r'(?:(?:rs\.?|inr|₹)\s*([0-9]{1,4}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?))\s*(?:incl|inclusive)', re.IGNORECASE),
     re.compile(r'\b(?:rs\.?|inr|₹)\s*([0-9]{1,4}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)\b', re.IGNORECASE),
+    re.compile(r'\b([0-9]+(?:\.[0-9]{1,2})?)\s*/\-\b'),
     re.compile(r'(?:m\.?r\.?p\.?|mrp)\s*[:\-\.]?\s*([0-9]+(?:\.[0-9]{1,2})?)', re.IGNORECASE)
 ]
 
 # 2. Net Quantity patterns
-# Recognizes: 100 g, 100g, 500 g, 1 kg, 1 L, 500 ml, 10 N, Net Qty: 200 g, Net Wt. 500g, Net Contents: 1 Litre
+# Recognizes: 100 g, 100g, 500 g, 1 kg, 1 L, 500 ml, 0.14L, 10 N, Net Qty: 200 g, Net Wt. 500g, Net Contents: 1 Litre
 QUANTITY_PATTERNS: List[Pattern] = [
     re.compile(r'(?:net\s*(?:qty|quantity|wt|weight|contents?|volume)?\s*[:\-\.]?\s*)?([0-9]+(?:\.[0-9]+)?|\.[0-9]+)\s*(kg|g|mg|l|ml|cl|cm3|mm|cm|m|sq\s*cm|sq\s*m|cm2|m2|gms?\.?|kgs?\.?|ltrs?\.?|litres?|liters?|mls?\.?|n|u|units?|pieces?|pcs|nos?|count)\b', re.IGNORECASE),
     re.compile(r'\b([0-9]+(?:\.[0-9]+)?)\s*(kg|g|mg|l|ml|cl|n|u|pcs|gms|kgs|ltrs)\b', re.IGNORECASE)
@@ -26,12 +27,13 @@ USP_PATTERNS: List[Pattern] = [
 ]
 
 # 4. Date patterns (Manufacturing, Packaging, Import, Expiry)
-# Recognizes: 06/2026, 06-2026, June 2026, Packed: 06/2026, Mfd: 06/2026, Mfg Date: 12/2025, PKD 01/26
+# Recognizes: 06/2026, 06-2026, June 2026, Packed: 06/2026, MAY-2026, APR-2027, Mfd: 06/2026, Mfg Date: 12/2025, PKD 01/26
 DATE_PATTERNS: List[Pattern] = [
     re.compile(r'(?:mfd|mfg|manufactured|pkd|packed|pkg|imported|date\s*of\s*mfg|date\s*of\s*pkg|date\s*of\s*packing)\s*[:\-\.]?\s*([0-9]{1,2}[/\-\.][0-9]{2,4}|[a-zA-Z]{3,9}\s*[/\-\.\s]\s*[0-9]{2,4})', re.IGNORECASE),
     re.compile(r'\b(0?[1-9]|1[0-2])[/\-\.](20\d{2}|\d{2})\b'),
-    re.compile(r'\b([a-zA-Z]{3,9})\s*[/\-\.\s]\s*(20\d{2}|\d{2})\b')
+    re.compile(r'\b([a-zA-Z]{3,9})[\-\/\s]+(20\d{2}|\d{2})\b', re.IGNORECASE)
 ]
+
 
 BEST_BEFORE_PATTERNS: List[Pattern] = [
     re.compile(r'(?:best\s*before|use\s*by|expiry\s*date|exp\.?\s*date|exp)\s*[:\-\.]?\s*([0-9]{1,2}[/\-\.][0-9]{2,4}|[a-zA-Z]{3,9}\s*[/\-\.\s]\s*[0-9]{2,4}|[0-9]+\s*months?(?:\s*from\s*(?:mfg|pkg|packaging|manufacture))?)', re.IGNORECASE),

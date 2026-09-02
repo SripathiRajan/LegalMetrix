@@ -11,7 +11,10 @@ from app.models.extracted_product import (
     VisionAnalysisResponse,
     AnalyzeResponse,
     AnalyzeVideoResponse,
-    SelectedFrameMetadata
+    SelectedFrameMetadata,
+    ExtractedFeature,
+    MissingField,
+    ExtractionInsight
 )
 from app.ocr.preprocessing import ImagePreprocessor
 from app.ocr.ocr_engine import BaseOCREngine, PaddleOCREngine
@@ -27,11 +30,149 @@ from app.rules.rule_engine import RuleEngine
 from app.services.history_service import HistoryService
 
 
+REQUIRED_DECLARATIONS_CATALOG = [
+    {
+        "field_key": "mrp",
+        "label": "Maximum Retail Price (MRP)",
+        "legal_ref": "Rule 6(1)(e) - PCR 2011",
+        "why_required": "Statutory retail price declaration inclusive of all taxes",
+        "usually_on": "Front / Principal Display Panel"
+    },
+    {
+        "field_key": "manufacturer_name",
+        "label": "Manufacturer / Packer / Importer Details",
+        "legal_ref": "Rule 6(1)(a) - PCR 2011",
+        "why_required": "Name and complete address of manufacturer, packer, or importer",
+        "usually_on": "Front or Back Panel"
+    },
+    {
+        "field_key": "commodity_name",
+        "label": "Generic / Commodity Name",
+        "legal_ref": "Rule 6(1)(b) - PCR 2011",
+        "why_required": "Common or generic identity of the commodity",
+        "usually_on": "Front / Principal Display Panel"
+    },
+    {
+        "field_key": "net_quantity",
+        "label": "Net Quantity",
+        "legal_ref": "Rule 6(1)(c) - PCR 2011",
+        "why_required": "Net weight, volume, or numerical count",
+        "usually_on": "Front / Principal Display Panel"
+    },
+    {
+        "field_key": "date_declaration",
+        "label": "Date of Mfg / Packing / Import",
+        "legal_ref": "Rule 6(1)(d) - PCR 2011",
+        "why_required": "Month and year of manufacture, packing, or import",
+        "usually_on": "Back or Side Panel"
+    },
+    {
+        "field_key": "consumer_care",
+        "label": "Consumer Care Details",
+        "legal_ref": "Rule 6(1)(g) - PCR 2011",
+        "why_required": "Contact person, address, phone number, or email for consumer complaints",
+        "usually_on": "Back Panel / Information Side"
+    },
+    {
+        "field_key": "country_of_origin",
+        "label": "Country of Origin",
+        "legal_ref": "Rule 6(1)(da) - PCR 2011",
+        "why_required": "Country of origin for statutory product tracking",
+        "usually_on": "Back Panel / Information Side"
+    },
+    {
+        "field_key": "unit_sale_price",
+        "label": "Unit Sale Price (USP)",
+        "legal_ref": "Rule 6(1)(e) - PCR 2011",
+        "why_required": "Price per unit (per g/ml) for standardized comparison",
+        "usually_on": "Front / Price Panel"
+    }
+]
+
+
+def build_extraction_insight(
+    extracted_data: ExtractedProductData,
+    field_sources: Optional[Dict[str, int]] = None,
+    images_count: int = 1
+) -> ExtractionInsight:
+    """
+    Constructs an extraction-first feature insight object comparing extracted fields
+    against mandatory PCR 2011 statutory declarations.
+    """
+    sources = field_sources or {}
+    found_features: List[ExtractedFeature] = []
+    missing_fields: List[MissingField] = []
+
+    for item in REQUIRED_DECLARATIONS_CATALOG:
+        key = item["field_key"]
+        f_val = getattr(extracted_data, key, None)
+        
+        is_detected = False
+        val_str = ""
+        conf = 0.0
+        
+        if f_val and isinstance(f_val, ExtractedField) and f_val.is_detected and f_val.value and str(f_val.value).strip():
+            is_detected = True
+            val_str = str(f_val.value).strip()
+            conf = f_val.confidence or 0.0
+        elif key == "manufacturer_name":
+            m_addr = getattr(extracted_data, "manufacturer_address", None)
+            p_name = getattr(extracted_data, "packer_name", None)
+            i_name = getattr(extracted_data, "importer_name", None)
+            for candidate in [m_addr, p_name, i_name]:
+                if candidate and candidate.is_detected and candidate.value and str(candidate.value).strip():
+                    is_detected = True
+                    val_str = str(candidate.value).strip()
+                    conf = candidate.confidence or 0.0
+                    break
+        elif key == "consumer_care":
+            c_email = getattr(extracted_data, "consumer_care_email", None)
+            c_phone = getattr(extracted_data, "consumer_care_phone", None)
+            c_addr = getattr(extracted_data, "consumer_care_address", None)
+            for candidate in [c_email, c_phone, c_addr]:
+                if candidate and candidate.is_detected and candidate.value and str(candidate.value).strip():
+                    is_detected = True
+                    val_str = str(candidate.value).strip()
+                    conf = candidate.confidence or 0.0
+                    break
+
+        if is_detected:
+            p_idx = sources.get(key, 0)
+            found_features.append(ExtractedFeature(
+                field_key=key,
+                label=item["label"],
+                value=val_str,
+                confidence=conf,
+                panel_index=p_idx,
+                legal_ref=item["legal_ref"]
+            ))
+        else:
+            missing_fields.append(MissingField(
+                field_key=key,
+                label=item["label"],
+                why_required=item["why_required"],
+                usually_on=item["usually_on"]
+            ))
+
+    total = len(REQUIRED_DECLARATIONS_CATALOG)
+    found_cnt = len(found_features)
+    img_plural = "images" if images_count > 1 else "image"
+    note = f"Extracted {found_cnt} of {total} statutory declarations across {images_count} package {img_plural}."
+
+    return ExtractionInsight(
+        found_features=found_features,
+        missing_fields=missing_fields,
+        panels_analyzed=images_count,
+        coverage_note=note
+    )
+
+
 GUIDANCE_NOTE_TEXT = (
     "Possible cause: Only back panel / nutrition side was captured. "
     "Please also upload a clear image of the front / principal display panel where MRP, "
     "manufacturer name & address, and consumer care details are usually printed."
 )
+
 
 
 def evaluate_missing_critical_guidance(product: ProductInput, compliance_result: ComplianceResponse) -> Optional[str]:
@@ -415,6 +556,8 @@ class ComplianceService:
             }
         }
 
+        extraction_insight = build_extraction_insight(extracted_data, images_count=1)
+
         return AnalyzeResponse(
             extracted_data=extracted_data,
             compliance_result=compliance_result,
@@ -431,8 +574,10 @@ class ComplianceService:
             annotated_image=annotated_b64,
             scan_id=scan_record.id if scan_record else None,
             authenticity_result=authenticity_result,
-            visual_evidence=visual_evidence
+            visual_evidence=visual_evidence,
+            extraction_insight=extraction_insight
         )
+
 
     def analyze_video_end_to_end(
         self,
@@ -857,6 +1002,12 @@ class ComplianceService:
             "multi_panel_note": multi_panel_note
         }
 
+        extraction_insight = build_extraction_insight(
+            merged_extracted,
+            field_sources=field_sources,
+            images_count=len(image_bytes_list)
+        )
+
         return AnalyzeResponse(
             extracted_data=merged_extracted,
             compliance_result=compliance_result,
@@ -875,8 +1026,10 @@ class ComplianceService:
             visual_evidence=visual_evidence,
             images_processed=len(image_bytes_list),
             field_sources=field_sources,
-            per_image_summary=per_image_summary
+            per_image_summary=per_image_summary,
+            extraction_insight=extraction_insight
         )
+
 
     def analyze_multiple_images_end_to_end(self, *args, **kwargs) -> AnalyzeResponse:
         """Alias for backward compatibility."""

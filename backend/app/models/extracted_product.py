@@ -180,6 +180,29 @@ class AuthenticityResult(BaseModel):
     font_height_ratio: Optional[float] = Field(default=None, description="Logo/text relative height ratio")
 
 
+class ExtractedFeature(BaseModel):
+    field_key: str
+    label: str
+    value: str
+    confidence: float = 0.0
+    panel_index: Optional[int] = None
+    legal_ref: Optional[str] = None
+
+
+class MissingField(BaseModel):
+    field_key: str
+    label: str
+    why_required: str
+    usually_on: str
+
+
+class ExtractionInsight(BaseModel):
+    found_features: List[ExtractedFeature] = Field(default_factory=list)
+    missing_fields: List[MissingField] = Field(default_factory=list)
+    panels_analyzed: int = 1
+    coverage_note: str = ""
+
+
 class AnalyzeResponse(BaseModel):
     """
     Response model for POST /api/analyze (Full pipeline end-to-end with visual evidence)
@@ -195,6 +218,8 @@ class AnalyzeResponse(BaseModel):
     images_processed: int = 1
     field_sources: Dict[str, int] = Field(default_factory=dict)
     per_image_summary: List[Dict[str, Any]] = Field(default_factory=list)
+    extraction_insight: Optional[ExtractionInsight] = None
+
 
 
 

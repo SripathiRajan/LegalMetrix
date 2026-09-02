@@ -190,6 +190,29 @@ export interface ChatRequest {
   context?: Record<string, any> | null;
 }
 
+export interface ExtractedFeature {
+  field_key: string;
+  label: string;
+  value: string;
+  confidence: number;
+  panel_index?: number;
+  legal_ref?: string;
+}
+
+export interface MissingField {
+  field_key: string;
+  label: string;
+  why_required: string;
+  usually_on: string;
+}
+
+export interface ExtractionInsight {
+  found_features: ExtractedFeature[];
+  missing_fields: MissingField[];
+  panels_analyzed: number;
+  coverage_note: string;
+}
+
 export interface AnalyzeScanResponse {
   compliance_result: ComplianceResponse;
   visual_evidence?: VisualEvidence | null;
@@ -200,6 +223,7 @@ export interface AnalyzeScanResponse {
   images_processed?: number | null;
   field_sources?: Record<string, number> | null;
   per_image_summary?: Array<Record<string, any>> | null;
+  extraction_insight?: ExtractionInsight | null;
   ocr_summary?: {
     regions_count: number;
     average_confidence: number;
@@ -208,3 +232,4 @@ export interface AnalyzeScanResponse {
     winning_engine?: string | null;
   } | null;
 }
+

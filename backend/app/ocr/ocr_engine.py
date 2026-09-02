@@ -25,70 +25,101 @@ class BaseOCREngine(ABC):
 
 class PaddleOCREngine(BaseOCREngine):
     """
-    PaddleOCR implementation for multilingual, high-accuracy text and bounding box detection.
+    PaddleOCR / RapidOCR implementation for high-accuracy text and bounding box detection.
     """
 
     def __init__(self, lang: str = "en", use_angle_cls: bool = True):
         self.lang = lang
         self.use_angle_cls = use_angle_cls
         self.ocr_instance = None
+        self.rapid_ocr = None
         self._initialize_engine()
 
     def _initialize_engine(self):
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+            logger.info("Initializing RapidOCR ONNX deep-learning engine...")
+            self.rapid_ocr = RapidOCR()
+            logger.info("RapidOCR engine initialized successfully.")
+            return
+        except Exception as e:
+            logger.debug(f"RapidOCR initialization failed: {e}")
+
         try:
             from paddleocr import PaddleOCR
             logger.info("Initializing PaddleOCR engine...")
             self.ocr_instance = PaddleOCR(use_angle_cls=self.use_angle_cls, lang=self.lang, show_log=False)
             logger.info("PaddleOCR engine initialized successfully.")
         except Exception as e:
-            logger.warning(f"PaddleOCR not initialized ({str(e)}). Running in fallback/mock mode.")
+            logger.warning(f"PaddleOCR not initialized ({str(e)}). Running in fallback mode.")
             self.ocr_instance = None
 
     def extract_text(self, image: Any) -> OCRResult:
-        if self.ocr_instance is None:
-            # Fallback when running in environments without Paddle weights preloaded
-            return OCRResult(
-                raw_text="",
-                regions=[],
-                average_confidence=0.0,
-                preprocessing_applied=[]
-            )
+        if self.rapid_ocr is not None:
+            try:
+                ocr_output, _ = self.rapid_ocr(image)
+                regions: List[OCRRegion] = []
+                extracted_lines: List[str] = []
+                confidences: List[float] = []
 
-        try:
-            # PaddleOCR expects BGR or RGB image
-            ocr_output = self.ocr_instance.ocr(image, cls=self.use_angle_cls)
-            
-            regions: List[OCRRegion] = []
-            extracted_lines: List[str] = []
-            confidences: List[float] = []
+                if ocr_output:
+                    for line_data in ocr_output:
+                        bbox, text, conf = line_data
+                        text_str = str(text).strip()
+                        if text_str:
+                            bbox_list = [[float(p[0]), float(p[1])] for p in bbox]
+                            conf_val = float(conf)
+                            regions.append(OCRRegion(
+                                text=text_str,
+                                confidence=round(conf_val, 4),
+                                bounding_box=bbox_list
+                            ))
+                            extracted_lines.append(text_str)
+                            confidences.append(conf_val)
 
-            if ocr_output and len(ocr_output) > 0 and ocr_output[0] is not None:
-                for line_data in ocr_output[0]:
-                    # line_data format: [bbox_coordinates, (text, confidence)]
-                    # bbox format: [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
-                    bbox = line_data[0]
-                    text, conf = line_data[1]
+                avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
+                full_text = "\n".join(extracted_lines)
 
-                    regions.append(OCRRegion(
-                        text=str(text).strip(),
-                        confidence=float(conf),
-                        bounding_box=bbox
-                    ))
-                    extracted_lines.append(str(text).strip())
-                    confidences.append(float(conf))
+                return OCRResult(
+                    raw_text=full_text,
+                    regions=regions,
+                    average_confidence=round(avg_conf, 3),
+                    preprocessing_applied=["rapidocr_onnx"]
+                )
+            except Exception as e:
+                logger.error(f"Error executing RapidOCR: {str(e)}")
 
-            avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
-            full_text = "\n".join(extracted_lines)
+        if self.ocr_instance is not None:
+            try:
+                ocr_output = self.ocr_instance.ocr(image, cls=self.use_angle_cls)
+                regions: List[OCRRegion] = []
+                extracted_lines: List[str] = []
+                confidences: List[float] = []
 
-            return OCRResult(
-                raw_text=full_text,
-                regions=regions,
-                average_confidence=round(avg_conf, 3),
-                preprocessing_applied=[]
-            )
-        except Exception as e:
-            logger.error(f"Error executing PaddleOCR: {str(e)}")
-            raise RuntimeError(f"PaddleOCR extraction failed: {str(e)}")
+                if ocr_output and len(ocr_output) > 0 and ocr_output[0] is not None:
+                    for line_data in ocr_output[0]:
+                        bbox = line_data[0]
+                        text, conf = line_data[1]
+                        regions.append(OCRRegion(
+                            text=str(text).strip(),
+                            confidence=float(conf),
+                            bounding_box=bbox
+                        ))
+                        extracted_lines.append(str(text).strip())
+                        confidences.append(float(conf))
+
+                avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
+                full_text = "\n".join(extracted_lines)
+
+                return OCRResult(
+                    raw_text=full_text,
+                    regions=regions,
+                    average_confidence=round(avg_conf, 3),
+                    preprocessing_applied=["paddleocr"]
+                )
+            except Exception as e:
+                logger.error(f"Error executing PaddleOCR: {str(e)}")
+
 
 
 class MockOCREngine(BaseOCREngine):
