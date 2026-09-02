@@ -392,7 +392,7 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
           {/* Action Button */}
           <button
             onClick={handleAnalyze}
-            disabled={isAnalyzing || (!selectedFile && !previewUrl)}
+            disabled={isAnalyzing || (selectedFiles.length === 0 && previewUrls.length === 0)}
             className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-brand-600 via-indigo-600 to-brand-500 hover:from-brand-500 hover:to-indigo-500 text-white font-bold text-sm shadow-glow transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
           >
             {isAnalyzing ? (
