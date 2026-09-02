@@ -10,9 +10,11 @@ from app.ocr.ocr_engine import (
     TesseractOCREngine
 )
 from app.ocr.result_ranker import OCRResultRanker
+from app.ocr.postprocessor import OCRPostProcessor
 from app.vision.bbox_utils import BBoxUtils
 
 logger = logging.getLogger(__name__)
+
 
 
 class EnsembleResult(BaseModel):
@@ -200,6 +202,9 @@ class OCREnsemble:
             image_height=primary_result.image_height,
             scale_factor=primary_result.scale_factor
         )
+
+        merged_result = OCRPostProcessor().process_ocr_result(merged_result)
+
 
         # Compute engine agreement score (0.0 to 1.0)
         # Fraction of cross-engine consensus across all detected clusters

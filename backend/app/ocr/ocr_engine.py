@@ -5,8 +5,10 @@ import numpy as np
 
 from app.models.extracted_product import OCRResult, OCRRegion
 from app.ocr.preprocessing import ImagePreprocessor
+from app.ocr.postprocessor import OCRPostProcessor
 
 logger = logging.getLogger(__name__)
+
 
 
 class BaseOCREngine(ABC):
@@ -231,13 +233,15 @@ class EasyOCREngine(BaseOCREngine):
 
 class TesseractOCREngine(BaseOCREngine):
     """
-    Tesseract OCR implementation (via pytesseract) with lazy loading and fallback handling.
+    Tesseract OCR implementation (via pytesseract) with lazy loading,
+    multi-PSM segmentation fallback, and domain post-processing.
     """
 
     def __init__(self, lang: str = "eng", config: str = "--oem 3 --psm 6"):
         self.lang = lang
         self.config = config
         self.ocr_instance = None
+        self.postprocessor = OCRPostProcessor()
         self._initialize_engine()
 
     def _initialize_engine(self):
@@ -250,9 +254,58 @@ class TesseractOCREngine(BaseOCREngine):
             logger.warning(f"Tesseract OCR not initialized ({str(e)}). Running in fallback/mock mode.")
             self.ocr_instance = None
 
+    def _run_tesseract_pass(self, image: Any, config_str: str) -> OCRResult:
+        data = self.ocr_instance.image_to_data(
+            image,
+            lang=self.lang,
+            config=config_str,
+            output_type=self.ocr_instance.Output.DICT
+        )
+
+        regions: List[OCRRegion] = []
+        extracted_lines: List[str] = []
+        confidences: List[float] = []
+
+        n_boxes = len(data.get("text", []))
+        for i in range(n_boxes):
+            text = str(data["text"][i]).strip()
+            conf_val = data["conf"][i]
+            try:
+                conf_float = float(conf_val)
+            except (ValueError, TypeError):
+                conf_float = -1.0
+
+            if not text or conf_float < 0:
+                continue
+
+            norm_conf = min(1.0, max(0.0, conf_float / 100.0))
+
+            x = float(data["left"][i])
+            y = float(data["top"][i])
+            w = float(data["width"][i])
+            h = float(data["height"][i])
+            bbox = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
+
+            regions.append(OCRRegion(
+                text=text,
+                confidence=round(norm_conf, 4),
+                bounding_box=bbox
+            ))
+            extracted_lines.append(text)
+            confidences.append(norm_conf)
+
+        avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
+        full_text = "\n".join(extracted_lines)
+
+        return OCRResult(
+            raw_text=full_text,
+            regions=regions,
+            average_confidence=round(avg_conf, 3),
+            preprocessing_applied=[]
+        )
+
     def extract_text(self, image: Any) -> OCRResult:
         if self.ocr_instance is None:
-            # Fallback when running in environments without pytesseract/Tesseract installed
             return OCRResult(
                 raw_text="",
                 regions=[],
@@ -261,56 +314,21 @@ class TesseractOCREngine(BaseOCREngine):
             )
 
         try:
-            data = self.ocr_instance.image_to_data(
-                image,
-                lang=self.lang,
-                config=self.config,
-                output_type=self.ocr_instance.Output.DICT
-            )
+            # Pass 1: Primary PSM configuration (default --psm 6)
+            res = self._run_tesseract_pass(image, self.config)
 
-            regions: List[OCRRegion] = []
-            extracted_lines: List[str] = []
-            confidences: List[float] = []
+            # Fallback Pass 2: If primary yields fewer than 3 regions, try PSM 11 (sparse text) or PSM 3
+            if len(res.regions) < 3:
+                alt_configs = ["--oem 3 --psm 11", "--oem 3 --psm 3"]
+                for alt_cfg in alt_configs:
+                    alt_res = self._run_tesseract_pass(image, alt_cfg)
+                    if len(alt_res.regions) > len(res.regions):
+                        res = alt_res
+                        break
 
-            n_boxes = len(data.get("text", []))
-            for i in range(n_boxes):
-                text = str(data["text"][i]).strip()
-                conf_val = data["conf"][i]
-                try:
-                    conf_float = float(conf_val)
-                except (ValueError, TypeError):
-                    conf_float = -1.0
-
-                # Tesseract returns conf = -1 for structure blocks / empty strings
-                if not text or conf_float < 0:
-                    continue
-
-                # Normalize confidence from 0-100 to 0.0-1.0
-                norm_conf = min(1.0, max(0.0, conf_float / 100.0))
-
-                x = float(data["left"][i])
-                y = float(data["top"][i])
-                w = float(data["width"][i])
-                h = float(data["height"][i])
-                bbox = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
-
-                regions.append(OCRRegion(
-                    text=text,
-                    confidence=round(norm_conf, 4),
-                    bounding_box=bbox
-                ))
-                extracted_lines.append(text)
-                confidences.append(norm_conf)
-
-            avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
-            full_text = "\n".join(extracted_lines)
-
-            return OCRResult(
-                raw_text=full_text,
-                regions=regions,
-                average_confidence=round(avg_conf, 3),
-                preprocessing_applied=[]
-            )
+            # Clean and fine-tune output text
+            res = self.postprocessor.process_ocr_result(res)
+            return res
         except Exception as e:
             logger.warning(f"Tesseract OCR execution failed ({str(e)}). Returning empty fallback.")
             return OCRResult(
@@ -319,4 +337,5 @@ class TesseractOCREngine(BaseOCREngine):
                 average_confidence=0.0,
                 preprocessing_applied=[]
             )
+
 

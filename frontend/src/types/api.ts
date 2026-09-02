@@ -214,7 +214,20 @@ export interface ExtractionInsight {
 }
 
 export interface AnalyzeScanResponse {
+  extracted_data?: {
+    raw_text?: string;
+    product_name?: string;
+    commodity_name?: string;
+    manufacturer_name?: string;
+    net_quantity?: string;
+    mrp?: string;
+    date_declaration?: string;
+    country_of_origin?: string;
+    [key: string]: any;
+  } | null;
+  raw_text?: string | null;
   compliance_result: ComplianceResponse;
+
   visual_evidence?: VisualEvidence | null;
   authenticity_result?: AuthenticityResult | null;
   scan_id?: number | null;

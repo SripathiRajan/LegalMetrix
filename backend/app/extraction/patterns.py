@@ -80,7 +80,7 @@ CONSUMER_CARE_KEYWORDS: List[str] = [
 ]
 
 EMAIL_PATTERN: Pattern = re.compile(r'\b[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+\b')
-PHONE_PATTERN: Pattern = re.compile(r'(?:\+?91[\-\s]?)?(?:1800[\-\s]?[0-9]{3,4}[\-\s]?[0-9]{3,4}|[6-9][0-9]{9}|\b\d{3,5}[\-\s]?\d{6,8}\b)')
+PHONE_PATTERN: Pattern = re.compile(r'(?:\+?91[\-\s]?)?(?:1800[\-\s]?[0-9]{3,4}[\-\s]?[0-9]{3,4}|(?:(?!890)[6-9])[0-9]{9}|\b\d{3,5}[\-\s]?\d{6,8}\b)')
 
 # 7. Country of Origin patterns
 # Recognizes: Country of Origin: India, Made in India, Country of Origin: China, Product of China

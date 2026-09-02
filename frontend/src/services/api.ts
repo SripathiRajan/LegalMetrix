@@ -168,4 +168,19 @@ export const chatApi = {
   },
 };
 
+export const llmApi = {
+  explainLabel: async (payload: {
+    raw_ocr_text: string;
+    groq_api_key: string;
+    current_date?: string;
+    extracted_fields?: Record<string, string>;
+  }): Promise<{ explanation: string; model_used: string }> => {
+    const response = await api.post<{ explanation: string; model_used: string }>(
+      '/api/llm/explain',
+      payload
+    );
+    return response.data;
+  },
+};
+
 export default api;

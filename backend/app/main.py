@@ -239,6 +239,8 @@ async def extract_declarations_from_image(
                 use_ensemble=use_ensemble,
                 merge_strategy=merge_strategy
             )
+    except HTTPException:
+        raise
     except ValueError as ve:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -250,6 +252,7 @@ async def extract_declarations_from_image(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"OCR extraction failed: {str(e)}"
         )
+
 
 
 @app.post(
@@ -528,6 +531,114 @@ def query_legal_chatbot(
             detail=f"Chatbot query failed: {str(e)}"
         )
 
+
+
+@app.post(
+    "/api/llm/explain",
+    status_code=status.HTTP_200_OK,
+    tags=["LLM Intelligence"],
+    summary="LLM-Powered Package Label Explanation",
+    description=(
+        "Sends the full raw OCR text from a package label image to Groq LLM and returns a structured, "
+        "context-aware human-readable explanation — including batch codes, dates, usability status, manufacturer address, "
+        "storage instructions, contact details, and corrected field values."
+    )
+)
+async def llm_explain_label(payload: Dict[str, Any]):
+    """
+    Accepts raw_ocr_text + optional extracted_fields JSON and calls Groq to produce
+    an intelligent, structured explanation of the label. The frontend provides its own Groq key.
+    """
+    import httpx as _httpx
+
+    raw_text = (payload.get("raw_ocr_text") or "").strip()
+    groq_api_key = (payload.get("groq_api_key") or "").strip()
+    current_date = payload.get("current_date") or datetime.now().strftime("%d %b %Y")
+    extracted_fields: Dict[str, Any] = payload.get("extracted_fields") or {}
+
+    if not raw_text:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="raw_ocr_text is required.")
+    if not groq_api_key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="groq_api_key is required.")
+
+    fields_summary = "\n".join(
+        f"  - {k}: {v}" for k, v in extracted_fields.items() if v
+    ) or "  (No structured fields pre-extracted)"
+
+    prompt = f"""You are an expert Legal Metrology compliance auditor and product label reader.
+
+The following is the COMPLETE raw OCR text extracted from a physical product package label image.
+Your task is to carefully read ALL text tokens — including batch codes, barcodes, dates, pricing, addresses, instructions, and contact details — and produce a clean, structured, human-readable analysis.
+
+TODAY'S DATE: {current_date}
+
+RAW OCR TEXT FROM LABEL:
+\"\"\"
+{raw_text}
+\"\"\"
+
+PRE-EXTRACTED STRUCTURED FIELDS (may contain OCR errors — use RAW TEXT above as ground truth to correct them):
+{fields_summary}
+
+INSTRUCTIONS:
+1. Identify and list ONLY sections actually present on the label. Use these headings as applicable:
+   ### Barcode / Product Code
+   ### Batch / Lot / Coding
+   ### Price & Net Weight
+   ### Manufacturing & Expiry Dates
+   ### Storage Instructions
+   ### Manufacturer / Packer / Importer
+   ### Contact Details
+   ### Country of Origin
+   ### Other Declarations
+
+2. Under "**Quick Status (as of {current_date})**": state whether the product is within its usable period.
+
+3. Silently correct obvious OCR artifacts (e.g. year 2826 → 2026, "LPRICERS.:" → Unit Sale Price label, "0.1 m" when label shows "1 Liter" → Net Qty: 1 L / 100 g, barcode digit sequences → identify as barcode, not phone).
+
+4. IMPORTANT: If manufacturer address mentions an Indian city (Madurai, Chennai, Mumbai, etc.) NEVER output that city as Country of Origin. Indian manufacturer = Country of Origin: India.
+
+5. Format output in clean markdown with bold headings and bullet points.
+
+6. End with: "Would you like me to generate a compliance report, check expiry status, or extract structured data?"
+"""
+
+    groq_models = ["llama-3.3-70b-versatile", "llama3-70b-8192", "gemma2-9b-it"]
+    last_error = ""
+
+    try:
+        async with _httpx.AsyncClient(timeout=20.0) as client:
+            for model in groq_models:
+                try:
+                    res = await client.post(
+                        "https://api.groq.com/openai/v1/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {groq_api_key}",
+                            "Content-Type": "application/json"
+                        },
+                        json={
+                            "model": model,
+                            "messages": [
+                                {"role": "system", "content": "You are a Legal Metrology product label analysis AI. Produce clean, accurate markdown based on raw OCR text."},
+                                {"role": "user", "content": prompt}
+                            ],
+                            "temperature": 0.15,
+                            "max_tokens": 1400
+                        }
+                    )
+                    if res.status_code == 200:
+                        data = res.json()
+                        explanation = data["choices"][0]["message"]["content"]
+                        logger.info(f"LLM label explanation generated via model: {model}")
+                        return {"explanation": explanation, "model_used": model}
+                    else:
+                        last_error = res.text
+                except Exception as exc:
+                    last_error = str(exc)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"LLM explanation failed: {str(exc)}")
+
+    raise HTTPException(status_code=502, detail=f"All Groq models failed. Last error: {last_error}")
 
 
 @app.get(

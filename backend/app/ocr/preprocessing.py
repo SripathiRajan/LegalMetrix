@@ -75,6 +75,47 @@ class ImagePreprocessor:
                            [0, -1, 0]], dtype=np.float32)
         return cv2.filter2D(gray_img, -1, kernel)
 
+    def upscale_image(self, img: Any, factor: float = 2.0) -> Any:
+        """Upscales image using bicubic interpolation for small text OCR resolution boost."""
+        if not CV2_AVAILABLE:
+            return img
+        h, w = img.shape[:2]
+        new_w, new_h = int(w * factor), int(h * factor)
+        return cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+
+    def deskew(self, gray_img: Any) -> Tuple[Any, float]:
+        """Automatically calculates text skew angle and rotates image straight."""
+        if not CV2_AVAILABLE:
+            return gray_img, 0.0
+
+        try:
+            # Threshold to get dark text on light background or vice versa
+            blur = cv2.GaussianBlur(gray_img, (5, 5), 0)
+            thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+
+            # Find coordinates of non-zero pixels
+            coords = np.column_stack(np.where(thresh > 0))
+            if len(coords) < 50:
+                return gray_img, 0.0
+
+            angle = cv2.minAreaRect(coords)[-1]
+            if angle < -45:
+                angle = -(90 + angle)
+            else:
+                angle = -angle
+
+            # Only rotate if skew angle is significant (> 0.5 degrees and < 30 degrees)
+            if abs(angle) > 0.5 and abs(angle) < 30.0:
+                h, w = gray_img.shape[:2]
+                center = (w // 2, h // 2)
+                M = cv2.getRotationMatrix2D(center, angle, 1.0)
+                rotated = cv2.warpAffine(gray_img, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+                return rotated, angle
+        except Exception as e:
+            logger.debug(f"Deskew calculation bypassed: {e}")
+
+        return gray_img, 0.0
+
     def preprocess_pipeline(
         self,
         image_bytes: bytes,
@@ -101,6 +142,11 @@ class ImagePreprocessor:
         gray = self.to_grayscale(resized_img)
         operations_applied.append("grayscale")
 
+        # Auto-deskew attempt
+        gray, angle = self.deskew(gray)
+        if abs(angle) > 0.5:
+            operations_applied.append(f"deskew_{angle:.1f}deg")
+
         if strategy == "denoise":
             denoised = self.denoise(gray)
             enhanced = self.enhance_contrast(denoised)
@@ -118,7 +164,39 @@ class ImagePreprocessor:
             operations_applied.append("adaptive_threshold_binary")
             return thresh, original_bgr, operations_applied, scale
 
+        elif strategy == "upscale":
+            upscaled = self.upscale_image(gray, factor=1.5)
+            enhanced = self.enhance_contrast(upscaled)
+            sharp = self.sharpen(enhanced)
+            operations_applied.extend(["upscale_1.5x", "clahe_contrast", "sharpen"])
+            return sharp, original_bgr, operations_applied, scale
+
+        elif strategy == "auto":
+            # Dynamic strategy selection based on image stats
+            std_dev = float(np.std(gray))
+            mean_val = float(np.mean(gray))
+
+            if gray.shape[0] < 800 or gray.shape[1] < 800:
+                gray = self.upscale_image(gray, factor=1.5)
+                operations_applied.append("upscale_1.5x")
+
+            if std_dev < 40.0:  # Low contrast
+                enhanced = self.enhance_contrast(gray)
+                sharp = self.sharpen(enhanced)
+                operations_applied.extend(["clahe_contrast", "sharpen"])
+                return sharp, original_bgr, operations_applied, scale
+            elif std_dev > 75.0 and (mean_val < 80 or mean_val > 180): # Noisy/uneven
+                denoised = self.denoise(gray)
+                enhanced = self.enhance_contrast(denoised)
+                operations_applied.extend(["median_denoise", "clahe_contrast"])
+                return enhanced, original_bgr, operations_applied, scale
+            else:
+                enhanced = self.enhance_contrast(gray)
+                operations_applied.append("clahe_contrast")
+                return enhanced, original_bgr, operations_applied, scale
+
         else:  # 'standard'
             enhanced = self.enhance_contrast(gray)
             operations_applied.append("clahe_contrast")
             return enhanced, original_bgr, operations_applied, scale
+

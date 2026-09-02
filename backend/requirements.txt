@@ -6,6 +6,7 @@ httpx>=0.27.0
 opencv-python-headless>=4.8.0
 numpy>=1.24.0
 python-multipart>=0.0.9
+httpx[http2]>=0.27.0
 paddleocr>=2.7.0
 paddlepaddle>=2.5.0
 # Optional multi-engine OCR dependencies

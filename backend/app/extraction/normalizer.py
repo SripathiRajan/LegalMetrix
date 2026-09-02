@@ -76,8 +76,10 @@ class FieldNormalizer:
         # Clean common prefixes
         cleaned = re.sub(r'^(?:mfd|mfg|pkd|packed|pkg|imported|best\s*before|use\s*by|date\s*of\s*(?:mfg|pkg|packing))?\s*[:\-\.]?\s*', '', cleaned, flags=re.IGNORECASE).strip()
 
+        cleaned = re.sub(r'[\-\/\.\s]+', '-', cleaned)
+
         # Handle MM/YYYY or MM-YYYY
-        m = re.match(r'^(0?[1-9]|1[0-2])[/\-\.](20\d{2}|\d{2})$', cleaned)
+        m = re.match(r'^(0?[1-9]|1[0-2])[\-\/\.](20\d{2}|\d{2})$', cleaned)
         if m:
             month = int(m.group(1))
             year = m.group(2)
@@ -85,7 +87,7 @@ class FieldNormalizer:
                 year = f"20{year}"
             return f"{month:02d}/{year}"
 
-        # Handle Month YYYY (e.g. June 2026 -> 06/2026)
+        # Handle Month YYYY (e.g. June 2026 -> 06/2026, MAY--2026 -> 05/2026)
         months_map = {
             "jan": "01", "january": "01",
             "feb": "02", "february": "02",
@@ -101,7 +103,7 @@ class FieldNormalizer:
             "dec": "12", "december": "12"
         }
 
-        m_word = re.match(r'^([a-zA-Z]+)\s*[/\-\.\s]\s*(20\d{2}|\d{2})$', cleaned)
+        m_word = re.match(r'^([a-zA-Z]+)[\-\/\.\s]+(20\d{2}|\d{2})$', cleaned)
         if m_word:
             mon_str = m_word.group(1).lower()
             year_str = m_word.group(2)

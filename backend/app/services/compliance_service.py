@@ -20,7 +20,9 @@ from app.ocr.preprocessing import ImagePreprocessor
 from app.ocr.ocr_engine import BaseOCREngine, PaddleOCREngine
 from app.ocr.result_ranker import OCRResultRanker, OCRVariantResult
 from app.ocr.ensemble import OCREnsemble, EnsembleResult
+from app.ocr.postprocessor import OCRPostProcessor
 from app.vision.reading_order import ReadingOrderResolver
+
 from app.vision.frame_selector import FrameSelector
 from app.extraction.declaration_extractor import DeclarationExtractor
 from app.vision.evidence import EvidenceAnnotator, EvidenceManager
@@ -289,10 +291,12 @@ class ComplianceService:
             if not use_ensemble:
                 # Single-pass standard execution with single engine
                 ocr_res = self.ocr_engine.extract_text(preprocessed_img)
+                ocr_res = OCRPostProcessor().process_ocr_result(ocr_res)
                 ocr_res.preprocessing_applied = operations
                 ocr_res.image_height = orig_h
                 ocr_res.image_width = orig_w
                 ocr_res.scale_factor = scale
+
 
                 extracted_data = self.extractor.extract(ocr_res, image_array=original_bgr)
                 rect_meta = {
@@ -565,6 +569,7 @@ class ComplianceService:
                 "average_confidence": ocr_res.average_confidence,
                 "regions_detected": len(ocr_res.regions),
                 "preprocessing_applied": ocr_res.preprocessing_applied,
+                "raw_text": ocr_res.raw_text,
                 "raw_text_length": len(ocr_res.raw_text),
                 "image_width": ocr_res.image_width,
                 "image_height": ocr_res.image_height,

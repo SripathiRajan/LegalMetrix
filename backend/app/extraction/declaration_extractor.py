@@ -19,6 +19,7 @@ from app.extraction.patterns import (
     ORIGIN_PATTERNS
 )
 from app.extraction.normalizer import FieldNormalizer
+from app.extraction.llm_extractor import LLMDeclarationExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +27,13 @@ logger = logging.getLogger(__name__)
 class DeclarationExtractor:
     """
     Hybrid declaration extractor combining regex, keyword-matching,
-    spatial/contextual OCR line parsing, and visual evidence construction.
+    LLM semantic context parsing, and visual evidence construction.
     """
 
-    def __init__(self, evidence_manager: Optional[EvidenceManager] = None):
+    def __init__(self, evidence_manager: Optional[EvidenceManager] = None, llm_extractor: Optional[LLMDeclarationExtractor] = None):
         self.normalizer = FieldNormalizer()
         self.evidence_manager = evidence_manager or EvidenceManager()
+        self.llm_extractor = llm_extractor or LLMDeclarationExtractor()
 
     def extract(self, ocr_result: OCRResult, image_array: Optional[Any] = None) -> ExtractedProductData:
         """
@@ -85,6 +87,9 @@ class DeclarationExtractor:
 
         # Inferred Category
         extracted.category = self._infer_category(raw_text)
+
+        # 9. LLM & Semantic Context Refinement (disambiguates Origin vs City, Net Quantity vs USP)
+        extracted = self.llm_extractor.refine_extracted_data(extracted, raw_text)
 
         return extracted
 
@@ -453,9 +458,18 @@ class DeclarationExtractor:
         candidates: List[Tuple[str, int]] = []
 
         # Scan top lines (up to 6 lines) for commodity name candidates
+        price_and_meta_keywords = [
+            "mrp", "net wt", "net qty", "mfd", "pkg", "date of", "best before",
+            "unit sale price", "country of origin", "price", "pricers", "lpricer",
+            "usp", "rs.", "inr", "₹", "rate", "amt", "amount", "incl"
+        ]
+
         for i, line in enumerate(lines[:6]):
             line_clean = line.strip()
-            if len(line_clean) > 2 and not any(kw in line_clean.lower() for kw in MANUFACTURER_KEYWORDS + PACKER_KEYWORDS + IMPORTER_KEYWORDS + CONSUMER_CARE_KEYWORDS + ["mrp", "net wt", "net qty", "mfd", "pkg", "date of", "best before", "unit sale price", "country of origin"]):
+            # Must be > 2 chars, not end with a colon, and not contain price or metadata keywords
+            if (len(line_clean) > 2 and
+                not line_clean.endswith(":") and
+                not any(kw in line_clean.lower() for kw in MANUFACTURER_KEYWORDS + PACKER_KEYWORDS + IMPORTER_KEYWORDS + CONSUMER_CARE_KEYWORDS + price_and_meta_keywords)):
                 candidates.append((line_clean, i))
 
         if not candidates:

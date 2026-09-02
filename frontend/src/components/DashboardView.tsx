@@ -24,8 +24,6 @@ import {
   YAxis, 
   Tooltip, 
   ResponsiveContainer, 
-  LineChart, 
-  Line, 
   CartesianGrid,
   Area,
   AreaChart,

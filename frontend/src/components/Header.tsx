@@ -10,7 +10,6 @@ import {
   Sparkles,
   Menu,
   X,
-  Shield,
   ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';

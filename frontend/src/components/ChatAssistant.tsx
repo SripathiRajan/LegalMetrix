@@ -13,12 +13,9 @@ import {
   Image as ImageIcon,
   X,
   Package,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
   ArrowRight
 } from 'lucide-react';
-import { scanApi } from '../services/api';
+import { scanApi, llmApi } from '../services/api';
 import type { AnalyzeScanResponse } from '../types/api';
 
 // ── Groq Config ──────────────────────────────────────────────
@@ -219,38 +216,68 @@ export const ChatAssistant: React.FC<ChatAssistantProps> = ({
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // ── LLM Explain via Backend ─────────────────────────────
+  const callLLMExplain = async (scanContext: AnalyzeScanResponse): Promise<string | null> => {
+    const rawOcrText = (scanContext as any).ocr_summary?.raw_text || '';
+    if (!rawOcrText || !GROQ_API_KEY) return null;
+    try {
+      const found = scanContext.extraction_insight?.found_features || [];
+      const extractedFields: Record<string, string> = {};
+      found.forEach(f => { if (f.value) extractedFields[f.label] = f.value; });
+      const currentDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const result = await llmApi.explainLabel({
+        raw_ocr_text: rawOcrText,
+        groq_api_key: GROQ_API_KEY,
+        current_date: currentDate,
+        extracted_fields: extractedFields,
+      });
+      return result.explanation;
+    } catch (err) {
+      console.warn('Backend LLM explain failed, falling back to Groq direct', err);
+      return null;
+    }
+  };
+
   // ── Construct Context Prompt ──────────────────────────────
   const buildSystemPrompt = (scanContext?: AnalyzeScanResponse | null) => {
     const currentDateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     let prompt = `You are LegalMetrix AI, an intelligent package label analysis assistant.
 
 When a package image or scan context is provided:
-1. Carefully analyze the ACTUAL label image details and extracted OCR text.
-2. Dynamically categorize and present ONLY the details actually found on the label (e.g. Barcode, Batch/Coding, Price & Net Weight, Storage Instructions, Manufacturer/Marketer, Contact details). Do NOT invent missing fields or output empty placeholders for fields not present on the label.
-3. If dates (packing/mfg date and expiry/best-before date) are present, calculate a "Quick status (as of ${currentDateStr})" stating whether the product is still within its usable period.
-4. Format your output using clean, left-aligned markdown headings and bullet points.
-5. End with a polite follow-up offering further assistance (e.g., clean structured data, expiry calculation, barcode lookup, report format, etc.).`;
+1. Carefully analyze the ACTUAL label image details and the raw OCR text. The raw OCR text is the ground truth — always prefer it over pre-extracted fields which may have OCR errors.
+2. Dynamically categorize and present ONLY the details actually found on the label (e.g. Barcode, Batch/Coding, Price & Net Weight, Storage Instructions, Manufacturer/Marketer, Contact details). Do NOT invent missing fields.
+3. Silently correct obvious OCR artifacts (e.g. year 2826 → 2026, "0.1 m" when label says "1 Liter" → 1 L / 100 g, Indian cities like Madurai → Country of Origin: India).
+4. If dates are present, calculate a "Quick status (as of ${currentDateStr})" stating whether the product is within its usable period.
+5. Format your output using clean, left-aligned markdown headings and bullet points.
+6. End with a polite follow-up offering further assistance.`;
 
     if (scanContext) {
       const c = scanContext.compliance_result;
       const found = scanContext.extraction_insight?.found_features || [];
       const missing = scanContext.extraction_insight?.missing_fields || [];
       const failed = c.results.filter(r => r.status === 'FAIL');
+      // Use raw_text from ocr_summary (now populated by backend)
+      const rawOcrText = (scanContext as any).ocr_summary?.raw_text || '';
 
-      prompt += `\n\nACTUAL EXTRACTED OCR PACKAGE DATA:
+      prompt += `\n\nFULL RAW OCR TEXT FROM LABEL IMAGE (ground truth — use this to correct field errors):
+"""
+${rawOcrText || '(No raw OCR text available)'}
+"""
+
 - Product Name: ${c.product_name || 'Pre-Packaged Commodity'}
 - Overall Compliance Status: ${c.overall_status} (${c.compliance_score.toFixed(0)}%)
-- Extracted Declarations (${found.length}):
+- Pre-Extracted Declarations (${found.length}) [may contain OCR errors — validate against raw OCR text above]:
 ${found.map(f => `  * ${f.label}: "${f.value}"`).join('\n') || '  (None)'}
 - Missing Required Declarations (${missing.length}): ${missing.map(m => m.label).join(', ') || 'None'}
 - Compliance Issues / Violations (${failed.length}):
 ${failed.map(r => `  * ${r.rule_name}: ${r.reason}`).join('\n') || '  None'}
 
-Analyze these actual extracted details to answer the user!`;
+Carefully analyze ALL raw OCR text lines, text snippets, and structured declarations above to answer the user!`;
     }
 
     return prompt;
   };
+
 
   // ── Send Handler ──────────────────────────────────────────
   const handleSendMessage = async (textToSend?: string) => {
@@ -290,8 +317,31 @@ Analyze these actual extracted details to answer the user!`;
 
     setMessages((prev) => [...prev, userMsg]);
 
-    // Use current active scan or newly uploaded scan
     const currentScanContext = uploadedScan || activeScan;
+
+    // ── Route image-analysis/explain requests to backend LLM endpoint ──
+    // Matches: new image upload, or explain/analyze/describe/summarize/extract text queries
+    const isExplainQuery = !query ||
+      /explain|analyze|describe|summarize|extract|what.*label|what.*image|tell me|read.*label|show.*details|what.*product/i.test(query);
+
+    if (currentScanContext && isExplainQuery && GROQ_API_KEY) {
+      const llmReply = await callLLMExplain(currentScanContext);
+      if (llmReply) {
+        const assistantMsg: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: llmReply,
+          scanData: uploadedScan,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+        setIsLoading(false);
+        inputRef.current?.focus();
+        return;
+      }
+    }
+
+    // ── Fall back to direct Groq with system prompt context ──
     const systemPrompt = buildSystemPrompt(currentScanContext);
 
     // Build chat history
@@ -392,16 +442,17 @@ Analyze these actual extracted details to answer the user!`;
 
   // Dynamic suggested prompts
   const suggestedPrompts = activeScan ? [
+    '📄 Extract and summarize all text from this image',
     `Why did "${activeScan.compliance_result.product_name || 'this package'}" get a ${activeScan.compliance_result.compliance_score.toFixed(0)}% score?`,
     'Summarize all extracted declarations from this package',
     'How can the manufacturer fix the compliance issues?',
-    'What font size rules apply to this product?',
   ] : [
     'What details must be on a product label?',
     'What is the MRP format requirement?',
     'How is net quantity checked for liquids?',
     'What font size is required for labels?',
   ];
+
 
   return (
     <div className="w-full max-w-4xl mx-auto flex flex-col h-[calc(100vh-148px)] min-h-[560px] rounded-2xl border border-white/5 overflow-hidden animate-fade-in"
