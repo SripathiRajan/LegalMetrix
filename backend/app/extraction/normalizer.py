@@ -125,3 +125,36 @@ class FieldNormalizer:
         # Clean any trailing punctuation
         cleaned = cleaned.rstrip(".,;:- ")
         return cleaned.title() if len(cleaned) > 2 else cleaned.upper()
+
+    @staticmethod
+    def is_code_like(value: str) -> bool:
+        """
+        Returns True if the string looks like a product/batch code rather than a common commodity name.
+        Code-like criteria:
+        - Purely numeric or no alphabetic characters (e.g. "98765", "1234")
+        - Length < 4 and contains digits (e.g. "A1", "12")
+        - Mostly digits + few letters (e.g. "S60017", "AB1234") where digit count >= letter count
+        """
+        if not value:
+            return False
+        s = value.strip()
+        if not s:
+            return False
+
+        num_digits = sum(1 for c in s if c.isdigit())
+        num_letters = sum(1 for c in s if c.isalpha())
+
+        # Purely numeric or no alphabetic characters
+        if num_digits > 0 and num_letters == 0:
+            return True
+
+        # Length < 4 containing numbers (e.g. "A1", "12")
+        if len(s) < 4 and num_digits > 0:
+            return True
+
+        # Mostly digits + few letters (e.g. S60017, AB1234)
+        if num_digits > 0 and num_digits >= num_letters:
+            return True
+
+        return False
+

@@ -112,6 +112,10 @@ class ComplianceResponse(BaseModel):
         default="physical_package",
         description="Scan input mode: 'physical_package' or 'ecommerce_listing'"
     )
+    guidance_note: Optional[str] = Field(
+        default=None,
+        description="Guidance for inspectors when multiple principal statutory declarations are missing"
+    )
     disclaimer: str = Field(
         default=FONT_SIZE_DISCLAIMER,
         description="Legal disclaimer regarding font size and rule-engine automation"

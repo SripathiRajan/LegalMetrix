@@ -307,3 +307,67 @@ def test_ecommerce_listing_mode_analysis():
     assert res.compliance_result.input_type == "ecommerce_listing"
     assert "E-commerce Listing Analysis Mode" in res.compliance_result.summary
 
+
+# 11. Date Validator Realistic Year Validation
+def test_date_validator_realistic_year():
+    from app.validators.date_validator import DateValidator
+    from app.models.product import RuleDefinition
+    from datetime import datetime
+
+    validator = DateValidator()
+    rule = RuleDefinition(
+        rule_id="LMPC_RULE_6_1_D",
+        field_name="date_declaration",
+        mandatory=True,
+        title="Month and Year of Manufacture",
+        description="Month and Year of Manufacture",
+        legal_reference="Rule 6(1)(d)",
+        declaration_name="Month and Year of Manufacture",
+        validation_type="date"
+    )
+    current_year = datetime.now().year
+    expected_max_year = current_year + 1
+
+    # Valid date (e.g. 03/2024) -> PASS
+    res_valid = validator.validate(ProductInput(date_declaration="03/2024"), rule)
+    assert res_valid.status == RuleStatus.PASS
+
+    # Future invalid year (01/2089) -> FAIL
+    res_future = validator.validate(ProductInput(date_declaration="01/2089"), rule)
+    assert res_future.status == RuleStatus.FAIL
+    assert "2089" in res_future.reason
+    assert f"Expected year between 2015 and {expected_max_year}" in res_future.reason
+
+    # Very old year (01/1995) -> FAIL
+    res_old = validator.validate(ProductInput(date_declaration="01/1995"), rule)
+    assert res_old.status == RuleStatus.FAIL
+    assert "1995" in res_old.reason
+    assert f"Expected year between 2015 and {expected_max_year}" in res_old.reason
+
+    # Missing date on mandatory rule -> FAIL
+    res_missing = validator.validate(ProductInput(date_declaration=None), rule)
+    assert res_missing.status == RuleStatus.FAIL
+    assert "missing" in res_missing.reason.lower()
+
+
+# 12. Commodity Name Product Code Rejection Test
+def test_commodity_code_rejection():
+    # Product input with code-like product name (S60017)
+    product_code = ProductInput(
+        product_name="S60017",
+        generic_name="S60017",
+        manufacturer_name="ABC Foods Pvt Ltd",
+        manufacturer_address="Madurai, Tamil Nadu 625001",
+        net_quantity="100 g",
+        mrp="₹50 incl. of all taxes",
+        date_declaration="06/2026",
+        consumer_care="support@abc.com 1800-123-4567"
+    )
+    assessment = engine.evaluate(product_code)
+    commodity_res = get_rule_result(assessment, "LMPC_RULE_6_1_B")
+    assert commodity_res is not None
+    assert commodity_res.status == RuleStatus.FAIL
+    assert "product/batch code" in commodity_res.reason
+
+
+

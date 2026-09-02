@@ -128,6 +128,9 @@ class OCRExtractResponse(BaseModel):
     average_confidence: float
     regions_count: int
     fields: Dict[str, ExtractedField]
+    images_processed: int = 1
+    field_sources: Dict[str, int] = Field(default_factory=dict)
+    per_image_summary: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class VisionAnalysisResponse(BaseModel):
@@ -172,9 +175,13 @@ class AnalyzeResponse(BaseModel):
     compliance_result: ComplianceResponse
     ocr_summary: Dict[str, Any]
     annotated_image: Optional[str] = None
+    annotated_images: List[str] = Field(default_factory=list)
     scan_id: Optional[int] = None
     authenticity_result: Optional[AuthenticityResult] = None
     visual_evidence: Optional[Dict[str, Any]] = None
+    images_processed: int = 1
+    field_sources: Dict[str, int] = Field(default_factory=dict)
+    per_image_summary: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 

@@ -20,12 +20,12 @@ class DateValidator(BaseValidator):
     ]
 
     # Patterns for valid month/year declarations:
-    # MM/YYYY, MM/YY, MM-YYYY, MM-YY, Month YYYY, Month YY, DD/MM/YYYY, DD-MM-YYYY
+    # Tuple format: (pattern_regex, format_name, year_group_index, month_group_index_or_none)
     PATTERNS = [
-        (re.compile(r'^(0?[1-9]|1[0-2])[/\-\.](20\d{2}|\d{2})$'), "MM/YYYY or MM/YY"),
-        (re.compile(r'^(0?[1-9]|[12]\d|3[01])[/\-\.](0?[1-9]|1[0-2])[/\-\.](20\d{2}|\d{2})$'), "DD/MM/YYYY"),
-        (re.compile(r'^(?:mfg|pkd|packed|mfd|imported)?\s*[:\-\.]?\s*([a-zA-Z]{3,9})\s*[/\-\.\s]\s*(20\d{2}|\d{2})$', re.IGNORECASE), "Month Year"),
-        (re.compile(r'^(?:mfg|pkd|packed|mfd|imported)?\s*[:\-\.]?\s*(0?[1-9]|1[0-2])[/\-\.](20\d{2}|\d{2})$', re.IGNORECASE), "MM/YYYY with prefix")
+        (re.compile(r'^(0?[1-9]|1[0-2])[/\-\.](\d{4}|\d{2})$'), "MM/YYYY or MM/YY", 2, None),
+        (re.compile(r'^(0?[1-9]|[12]\d|3[01])[/\-\.](0?[1-9]|1[0-2])[/\-\.](\d{4}|\d{2})$'), "DD/MM/YYYY", 3, None),
+        (re.compile(r'^(?:mfg|pkd|packed|mfd|imported)?\s*[:\-\.]?\s*([a-zA-Z]{3,9})\s*[/\-\.\s]\s*(\d{4}|\d{2})$', re.IGNORECASE), "Month Year", 2, 1),
+        (re.compile(r'^(?:mfg|pkd|packed|mfd|imported)?\s*[:\-\.]?\s*(0?[1-9]|1[0-2])[/\-\.](\d{4}|\d{2})$', re.IGNORECASE), "MM/YYYY with prefix", 2, None)
     ]
 
     def validate(self, product: ProductInput, rule: RuleDefinition) -> RuleCheckResult:
@@ -79,29 +79,31 @@ class DateValidator(BaseValidator):
         # Match patterns
         matched = False
         parsed_format = ""
-        for pattern, fmt_name in self.PATTERNS:
+        year_str: Optional[str] = None
+
+        for item in self.PATTERNS:
+            pattern, fmt_name, yr_idx, mo_idx = item
             match = pattern.match(date_str)
             if match:
+                if mo_idx is not None and match.group(mo_idx).lower() not in self.MONTH_NAMES:
+                    continue
                 matched = True
                 parsed_format = fmt_name
+                year_str = match.group(yr_idx)
                 break
 
         if not matched:
             # Check if any month name is in the string
             tokens = [t.lower() for t in re.split(r'[\s/\-\.,]+', date_str) if t]
             has_month = any(t in self.MONTH_NAMES for t in tokens)
-            has_year = any(re.match(r'^(20\d{2}|\d{2})$', t) for t in tokens)
+            year_token = next((t for t in tokens if re.match(r'^(\d{4}|\d{2})$', t)), None)
             
-            if has_month and has_year:
-                return self.create_result(
-                    rule=rule,
-                    status=RuleStatus.PASS,
-                    detected_value=date_str,
-                    reason=f"Valid date declaration '{date_str}' containing recognized month and year per Rule 6(1)(d).",
-                    severity=rule.severity,
-                    metadata={"parsed_format": "Natural Month Year"}
-                )
+            if has_month and year_token:
+                matched = True
+                parsed_format = "Natural Month Year"
+                year_str = year_token
 
+        if not matched:
             # Check if date contains purely numeric ambiguous values
             if re.search(r'\d+', date_str):
                 return self.create_result(
@@ -119,6 +121,26 @@ class DateValidator(BaseValidator):
                 reason=f"Unrecognized date declaration format '{date_str}'. Rule 6(1)(d) mandates month and year.",
                 severity=SeverityLevel.HIGH
             )
+
+        # Realistic year validation (between 2015 and current_year + 1)
+        current_year = datetime.now().year
+        max_year = current_year + 1
+        min_year = 2015
+
+        if year_str:
+            if len(year_str) == 2:
+                year_int = 2000 + int(year_str)
+            else:
+                year_int = int(year_str)
+
+            if year_int < min_year or year_int > max_year:
+                return self.create_result(
+                    rule=rule,
+                    status=RuleStatus.FAIL,
+                    detected_value=date_str,
+                    reason=f"Declared manufacture/packing year '{year_str}' is not realistic. Expected year between {min_year} and {max_year}.",
+                    severity=SeverityLevel.HIGH
+                )
 
         return self.create_result(
             rule=rule,

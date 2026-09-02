@@ -42,17 +42,34 @@ export const authApi = {
 
 export const scanApi = {
   analyzeImage: async (
-    file: File | Blob,
+    files: (File | Blob)[] | File | Blob,
     options: {
       use_ensemble?: boolean;
       preprocessing_strategy?: string;
       brand_name?: string;
       persist?: boolean;
       input_type?: 'physical_package' | 'ecommerce_listing';
+      merge_strategy?: string;
     } = {}
   ): Promise<AnalyzeScanResponse> => {
     const formData = new FormData();
-    formData.append('file', file, 'package_scan.jpg');
+
+    if (Array.isArray(files)) {
+      files.forEach((f, idx) => {
+        const filename = f instanceof File ? f.name : `package_panel_${idx + 1}.jpg`;
+        formData.append('files', f, filename);
+      });
+      if (files.length > 0) {
+        // Legacy single file fallback
+        const singleFile = files[0];
+        const fname = singleFile instanceof File ? singleFile.name : 'package_scan.jpg';
+        formData.append('file', singleFile, fname);
+      }
+    } else {
+      const filename = files instanceof File ? files.name : 'package_scan.jpg';
+      formData.append('file', files, filename);
+      formData.append('files', files, filename);
+    }
 
     const params: Record<string, string | boolean> = {};
     if (options.use_ensemble !== undefined) params.use_ensemble = options.use_ensemble;
@@ -60,6 +77,7 @@ export const scanApi = {
     if (options.brand_name) params.brand_name = options.brand_name;
     if (options.persist !== undefined) params.persist = options.persist;
     if (options.input_type) params.input_type = options.input_type;
+    if (options.merge_strategy) params.merge_strategy = options.merge_strategy;
 
     const response = await api.post<AnalyzeScanResponse>('/api/analyze', formData, {
       params,

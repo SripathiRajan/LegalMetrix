@@ -19,8 +19,8 @@ interface ScanUploadProps {
 }
 
 export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [useEnsemble, setUseEnsemble] = useState(true);
   const [strategy, setStrategy] = useState<string>('standard');
@@ -33,29 +33,41 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Add files to state
+  const addFiles = (newFiles: File[]) => {
+    if (newFiles.length === 0) return;
+    const urls = newFiles.map((f) => URL.createObjectURL(f));
+    setSelectedFiles((prev) => [...prev, ...newFiles]);
+    setPreviewUrls((prev) => [...prev, ...urls]);
+    stopCamera();
+    setError(null);
+  };
+
   // Handle file select
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setSelectedFile(file);
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
-      stopCamera();
-      setError(null);
+    if (e.target.files && e.target.files.length > 0) {
+      addFiles(Array.from(e.target.files));
     }
   };
 
   // Drag and drop
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      setSelectedFile(file);
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
-      stopCamera();
-      setError(null);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      addFiles(Array.from(e.dataTransfer.files));
     }
+  };
+
+  // Remove single image
+  const removeImage = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+    setPreviewUrls((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Clear all images
+  const clearAllImages = () => {
+    setSelectedFiles([]);
+    setPreviewUrls([]);
   };
 
   // Start Camera
@@ -63,8 +75,6 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
     try {
       setError(null);
       setIsCameraActive(true);
-      setPreviewUrl(null);
-      setSelectedFile(null);
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
       });
@@ -73,7 +83,7 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
         videoRef.current.srcObject = stream;
       }
     } catch {
-      setError('Unable to access camera. Please allow camera permissions or upload an image file.');
+      setError('Unable to access camera. Please allow camera permissions or upload image file(s).');
       setIsCameraActive(false);
     }
   };
@@ -99,10 +109,8 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       canvas.toBlob((blob) => {
         if (blob) {
-          const file = new File([blob], 'camera_capture.jpg', { type: 'image/jpeg' });
-          setSelectedFile(file);
-          setPreviewUrl(canvas.toDataURL('image/jpeg'));
-          stopCamera();
+          const snapshotFile = new File([blob], `camera_panel_${selectedFiles.length + 1}.jpg`, { type: 'image/jpeg' });
+          addFiles([snapshotFile]);
         }
       }, 'image/jpeg', 0.95);
     }
@@ -110,8 +118,8 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
 
   // Trigger Analysis
   const handleAnalyze = async () => {
-    if (!selectedFile && !previewUrl) {
-      setError('Please upload an image or capture a scan first.');
+    if (selectedFiles.length === 0 && previewUrls.length === 0) {
+      setError('Please upload at least one package image or capture a scan first.');
       return;
     }
 
@@ -119,14 +127,7 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
     setIsAnalyzing(true);
 
     try {
-      let fileToUpload: File | Blob = selectedFile!;
-      if (!selectedFile && previewUrl) {
-        // Fetch blob from data URL
-        const res = await fetch(previewUrl);
-        fileToUpload = await res.blob();
-      }
-
-      const response = await scanApi.analyzeImage(fileToUpload, {
+      const response = await scanApi.analyzeImage(selectedFiles, {
         use_ensemble: useEnsemble,
         preprocessing_strategy: strategy,
         brand_name: brandName.trim() || undefined,
@@ -134,11 +135,11 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
         input_type: inputType,
       });
 
-      onScanComplete(response, previewUrl || '');
+      onScanComplete(response, previewUrls[0] || '');
     } catch (err: any) {
       setError(
         err?.response?.data?.detail ||
-          'Analysis failed. Ensure the image is a clear package or product listing image and try again.'
+          'Analysis failed. Ensure the images are clear package or product listing images and try again.'
       );
     } finally {
       setIsAnalyzing(false);
@@ -151,14 +152,14 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
       <div className="text-center space-y-2">
         <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-300 text-xs font-semibold">
           <Sparkles className="w-3.5 h-3.5" />
-          <span>Multi-Engine OCR Ensemble • Physical Packages & E-Commerce Listing Support</span>
+          <span>Multi-Panel OCR Ensemble • Upload 2+ Panels (Front, Back, Sides)</span>
         </div>
         <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white font-display">
           Statutory Compliance Inspection Scanner
         </h1>
         <p className="text-sm text-slate-400 max-w-2xl mx-auto">
-          Capture physical packaged commodity labels or upload e-commerce listing screenshots. The engine validates statutory declarations against 
-          the <span className="text-brand-300 font-semibold">Legal Metrology (Packaged Commodities) Rules, 2011</span> and official DoCA gazettes.
+          Upload 1 or more product panel images (e.g. front &amp; back display panels). The engine merges extracted fields intelligently and validates declarations against 
+          the <span className="text-brand-300 font-semibold">Legal Metrology (Packaged Commodities) Rules, 2011</span>.
         </p>
       </div>
 
@@ -193,7 +194,7 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
 
       {/* Main Scanner Container */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left: Input Viewport */}
+        {/* Left: Input Viewport & Gallery */}
         <div className="lg:col-span-8 glass-panel rounded-2xl p-4 sm:p-6 flex flex-col justify-between min-h-[420px]">
           {isCameraActive ? (
             <div className="relative w-full h-[360px] sm:h-[420px] rounded-xl overflow-hidden bg-black flex items-center justify-center border border-slate-800">
@@ -213,33 +214,57 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
                   className="px-6 py-2.5 rounded-full bg-brand-600 hover:bg-brand-500 text-white font-semibold text-sm shadow-glow flex items-center space-x-2 transition-all active:scale-95"
                 >
                   <Camera className="w-4 h-4" />
-                  <span>Capture Snapshot</span>
+                  <span>Capture Snapshot ({selectedFiles.length} Saved)</span>
                 </button>
                 <button
                   onClick={stopCamera}
                   className="px-4 py-2.5 rounded-full bg-slate-800/90 hover:bg-slate-700 text-slate-200 font-medium text-xs transition-colors"
                 >
-                  Cancel
+                  Done Camera
                 </button>
               </div>
             </div>
-          ) : previewUrl ? (
-            <div className="relative w-full h-[360px] sm:h-[420px] rounded-xl overflow-hidden bg-slate-950 border border-slate-800 flex items-center justify-center group">
-              <img
-                src={previewUrl}
-                alt="Package preview"
-                className="w-full h-full object-contain"
-              />
-              <div className="absolute top-3 right-3 flex items-center space-x-2">
-                <button
-                  onClick={() => {
-                    setPreviewUrl(null);
-                    setSelectedFile(null);
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-slate-900/80 backdrop-blur-md border border-slate-700 hover:bg-rose-600/80 text-xs text-slate-200 hover:text-white transition-all"
-                >
-                  Change Image
-                </button>
+          ) : previewUrls.length > 0 ? (
+            <div className="w-full space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-brand-300">
+                  {previewUrls.length} {previewUrls.length === 1 ? 'Panel Image' : 'Panel Images'} Selected (Multi-Panel Fusion)
+                </span>
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded-lg bg-brand-600/20 hover:bg-brand-600/30 border border-brand-500/40 text-xs text-brand-200 font-semibold transition-all"
+                  >
+                    + Add Another Panel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearAllImages}
+                    className="px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-700 hover:bg-rose-600/80 text-xs text-slate-200 hover:text-white transition-all"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              </div>
+
+              {/* Thumbnails Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[340px] overflow-y-auto p-2 bg-slate-950 rounded-xl border border-slate-800">
+                {previewUrls.map((url, idx) => (
+                  <div key={idx} className="relative group rounded-lg overflow-hidden border border-slate-700 bg-slate-900 h-36 flex items-center justify-center">
+                    <img src={url} alt={`Panel ${idx + 1}`} className="w-full h-full object-contain" />
+                    <div className="absolute top-1 left-1 px-2 py-0.5 rounded bg-slate-900/80 backdrop-blur text-[10px] font-bold text-slate-200 border border-slate-700">
+                      Panel #{idx + 1}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeImage(idx)}
+                      className="absolute top-1 right-1 w-6 h-6 rounded-full bg-rose-600/90 text-white font-bold text-xs flex items-center justify-center opacity-80 group-hover:opacity-100 transition-opacity"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
               </div>
             </div>
           ) : (
@@ -253,6 +278,7 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
+                multiple
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -260,10 +286,10 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
                 <UploadCloud className="w-8 h-8" />
               </div>
               <p className="text-base font-semibold text-slate-200">
-                Drag and drop your package image here
+                Drag and drop package images here (1 or multiple panels)
               </p>
               <p className="text-xs text-slate-400 mt-1">
-                Supports JPG, PNG, WEBP high-resolution packaging labels
+                Select front, back, or side panels simultaneously. Supports JPG, PNG, WEBP.
               </p>
 
               <div className="flex items-center space-x-3 mt-6">
@@ -276,7 +302,7 @@ export const ScanUpload: React.FC<ScanUploadProps> = ({ onScanComplete }) => {
                   onClick={() => fileInputRef.current?.click()}
                   className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 transition-colors"
                 >
-                  Browse Files
+                  Browse Image Files
                 </button>
                 <button
                   type="button"

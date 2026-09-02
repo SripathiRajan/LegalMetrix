@@ -90,6 +90,7 @@ class PDFReportGenerator:
         officer_id: Optional[Union[int, str]] = None,
         created_at: Optional[Union[datetime, str]] = None,
         annotated_image_b64: Optional[str] = None,
+        annotated_images: Optional[List[str]] = None,
         authenticity_result: Optional[Dict[str, Any]] = None,
         visual_statistics: Optional[Dict[str, Any]] = None,
         extracted_data: Optional[Dict[str, Any]] = None
@@ -241,6 +242,58 @@ class PDFReportGenerator:
         ]))
         elements.append(meta_table)
         elements.append(Spacer(1, 10))
+
+        # Inspector Guidance Note Callout (when critical fields are missing)
+        guidance_note = compliance_result.get("guidance_note")
+        if not guidance_note:
+            results_list = compliance_result.get("results", [])
+            mrp_ok = any(r.get("rule_id") == "LMPC_RULE_6_1_E" and r.get("status") == "PASS" for r in results_list)
+            mfg_ok = any(r.get("rule_id") == "LMPC_RULE_6_1_A" and r.get("status") == "PASS" for r in results_list)
+            care_ok = any(r.get("rule_id") == "LMPC_RULE_6_1_G" and r.get("status") == "PASS" for r in results_list)
+            missing_crit = sum([1 for ok in [mrp_ok, mfg_ok, care_ok] if not ok])
+            if missing_crit >= 2:
+                guidance_note = (
+                    "Possible cause: Only back panel / nutrition side was captured. "
+                    "Please also upload a clear image of the front / principal display panel where MRP, "
+                    "manufacturer name & address, and consumer care details are usually printed."
+                )
+
+        if guidance_note:
+            guidance_heading_style = ParagraphStyle(
+                "GuidanceHeading",
+                parent=styles["Normal"],
+                fontName="Helvetica-Bold",
+                fontSize=9,
+                leading=11,
+                textColor=colors.HexColor("#9A3412")
+            )
+            guidance_text_style = ParagraphStyle(
+                "GuidanceText",
+                parent=styles["Normal"],
+                fontName="Helvetica",
+                fontSize=8,
+                leading=10.5,
+                textColor=colors.HexColor("#7C2D12")
+            )
+            guidance_box = Table(
+                [[
+                    Paragraph("<b>⚠️ INSPECTOR GUIDANCE NOTE:</b>", guidance_heading_style),
+                ], [
+                    Paragraph(guidance_note, guidance_text_style)
+                ]],
+                colWidths=[540]
+            )
+            guidance_box.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#FFFBEB")),
+                ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#F59E0B")),
+                ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#FDE68A")),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            elements.append(guidance_box)
+            elements.append(Spacer(1, 8))
 
         # 3. Visual Annotated Evidence Image (if available)
         image_src = annotated_image_b64 or compliance_result.get("annotated_image")

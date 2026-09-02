@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any, Tuple, List
 from app.models.product import ProductInput, ComplianceResponse
 from app.models.extracted_product import (
     OCRResult,
+    ExtractedField,
     ExtractedProductData,
     OCRExtractResponse,
     VisionAnalysisResponse,
@@ -24,7 +25,48 @@ from app.rules.rule_engine import RuleEngine
 from app.services.history_service import HistoryService
 
 
-logger = logging.getLogger(__name__)
+GUIDANCE_NOTE_TEXT = (
+    "Possible cause: Only back panel / nutrition side was captured. "
+    "Please also upload a clear image of the front / principal display panel where MRP, "
+    "manufacturer name & address, and consumer care details are usually printed."
+)
+
+
+def evaluate_missing_critical_guidance(product: ProductInput, compliance_result: ComplianceResponse) -> Optional[str]:
+    """
+    Checks if 2 or more critical mandatory fields (MRP, Manufacturer, Consumer Care) are missing or failed.
+    Returns guidance note string if so, otherwise None.
+    """
+    missing_count = 0
+
+    # 1. MRP
+    has_mrp = bool(product.mrp and str(product.mrp).strip())
+    if not has_mrp:
+        missing_count += 1
+
+    # 2. Manufacturer / Packer / Importer
+    has_mfg = bool(
+        (product.manufacturer_name and str(product.manufacturer_name).strip()) or
+        (product.manufacturer_address and str(product.manufacturer_address).strip()) or
+        (product.packer_name and str(product.packer_name).strip()) or
+        (product.importer_name and str(product.importer_name).strip())
+    )
+    if not has_mfg:
+        missing_count += 1
+
+    # 3. Consumer Care
+    has_care = bool(
+        (product.consumer_care and str(product.consumer_care).strip()) or
+        (product.consumer_care_email and str(product.consumer_care_email).strip()) or
+        (product.consumer_care_phone and str(product.consumer_care_phone).strip()) or
+        (product.consumer_care_address and str(product.consumer_care_address).strip())
+    )
+    if not has_care:
+        missing_count += 1
+
+    if missing_count >= 2:
+        return GUIDANCE_NOTE_TEXT
+    return None
 
 
 class ComplianceService:
@@ -61,13 +103,17 @@ class ComplianceService:
         self.history_service = history_service or HistoryService()
         self.authenticity_checker = authenticity_checker or AuthenticityChecker()
 
-
-
     def check_compliance(self, product: ProductInput) -> ComplianceResponse:
         """
         Direct rule engine evaluation on structured ProductInput.
         """
-        return self.rule_engine.evaluate(product)
+        res = self.rule_engine.evaluate(product)
+        guidance = evaluate_missing_critical_guidance(product, res)
+        if guidance:
+            res.guidance_note = guidance
+            if guidance not in (res.summary or ""):
+                res.summary = f"{res.summary or ''}\n\n[INSPECTOR GUIDANCE] {guidance}".strip()
+        return res
 
     def extract_from_image(
         self,
@@ -311,6 +357,13 @@ class ComplianceService:
                 "Physical package dimension/font height checks set to Not Applicable for online product listing screenshots."
             )
 
+        # Check for missing critical fields guidance note
+        guidance = evaluate_missing_critical_guidance(product_input, compliance_result)
+        if guidance:
+            compliance_result.guidance_note = guidance
+            if guidance not in (compliance_result.summary or ""):
+                compliance_result.summary = f"{compliance_result.summary or ''}\n\n[INSPECTOR GUIDANCE] {guidance}".strip()
+
         # Generate annotated evidence image
         annotated_b64 = self.generate_annotated_image(original_bgr, compliance_result, extracted_data)
         compliance_result.annotated_image = annotated_b64
@@ -474,5 +527,358 @@ class ComplianceService:
             annotated_image=annotated_b64,
             extracted_data=extracted_data
         )
+
+    def _merge_extracted_data_with_sources(
+        self,
+        extracted_list: List[ExtractedProductData],
+        merge_strategy: str = "best_fields"
+    ) -> Tuple[ExtractedProductData, Dict[str, int]]:
+        """
+        Merges multiple ExtractedProductData instances into a single ExtractedProductData,
+        selecting the best field extractions across all uploaded images and returning field_sources mapping.
+        """
+        if not extracted_list:
+            return ExtractedProductData(), {}
+        if len(extracted_list) == 1:
+            sources = {}
+            for field_name in ExtractedProductData.model_fields.keys():
+                val = getattr(extracted_list[0], field_name, None)
+                if isinstance(val, ExtractedField) and val.is_detected and val.value:
+                    sources[field_name] = 0
+            return extracted_list[0], sources
+
+        merged = ExtractedProductData()
+        field_sources: Dict[str, int] = {}
+        fields = [
+            "product_name", "commodity_name", "manufacturer_name", "manufacturer_address",
+            "packer_name", "packer_address", "importer_name", "importer_address",
+            "net_quantity", "mrp", "unit_sale_price", "date_declaration", "best_before",
+            "consumer_care", "consumer_care_email", "consumer_care_phone", "consumer_care_address",
+            "country_of_origin"
+        ]
+
+        for field_name in fields:
+            candidates: List[Tuple[int, ExtractedField]] = []
+            for idx, ext in enumerate(extracted_list):
+                field_val = getattr(ext, field_name, None)
+                if field_val and isinstance(field_val, ExtractedField) and field_val.is_detected and field_val.value:
+                    candidates.append((idx, field_val))
+
+            if candidates:
+                def scoring_key(item: Tuple[int, ExtractedField]):
+                    idx, f = item
+                    conf = f.confidence or 0.0
+                    readability = getattr(f, "readability_score", 0.0) or 0.0
+                    val_str = str(f.value).strip()
+                    val_len = len(val_str)
+
+                    # For address and consumer care fields, string completeness is preferred when confidences are close
+                    if field_name in ("manufacturer_address", "packer_address", "importer_address", "consumer_care", "consumer_care_address"):
+                        return (conf * 10.0 + readability * 5.0, val_len)
+                    return (conf, readability, val_len)
+
+                best_idx, best_field = max(candidates, key=scoring_key)
+                setattr(merged, field_name, best_field)
+                field_sources[field_name] = best_idx
+
+        merged.category = next((e.category for e in extracted_list if e.category and e.category != "general"), "general")
+        merged.is_imported = any(e.is_imported for e in extracted_list)
+        return merged, field_sources
+
+    def _merge_extracted_data(self, extracted_list: List[ExtractedProductData]) -> ExtractedProductData:
+        merged, _ = self._merge_extracted_data_with_sources(extracted_list)
+        return merged
+
+    def extract_from_multiple_images(
+        self,
+        image_bytes_list: List[bytes],
+        preprocessing_strategy: str = "standard",
+        multi_pass: bool = False,
+        use_ensemble: bool = False,
+        merge_strategy: str = "best_fields"
+    ) -> OCRExtractResponse:
+        """
+        Runs OCR extraction on multiple panel images and merges the extracted declarations.
+        """
+        if not image_bytes_list:
+            raise ValueError("No images provided for multi-image extraction.")
+
+        if len(image_bytes_list) == 1:
+            ocr_res, extracted, _, _ = self.extract_from_image(
+                image_bytes_list[0],
+                preprocessing_strategy=preprocessing_strategy,
+                multi_pass=multi_pass,
+                use_ensemble=use_ensemble
+            )
+            detected_fields = {
+                k: v for k, v in extracted.get_fields().items()
+            }
+            sources = {
+                k: 0 for k, v in detected_fields.items()
+                if v.is_detected and v.value
+            }
+            return OCRExtractResponse(
+                ocr_text=ocr_res.raw_text,
+                average_confidence=ocr_res.average_confidence,
+                regions_count=len(ocr_res.regions),
+                fields=detected_fields,
+                images_processed=1,
+                field_sources=sources,
+                per_image_summary=[{
+                    "image_index": 0,
+                    "status": "success",
+                    "regions_detected": len(ocr_res.regions),
+                    "average_confidence": ocr_res.average_confidence,
+                    "fields_found": list(sources.keys())
+                }]
+            )
+
+        results = []
+        per_image_summary: List[Dict[str, Any]] = []
+
+        for idx, img_bytes in enumerate(image_bytes_list):
+            ocr_res, ext_data, orig_bgr, rect_meta = self.extract_from_image(
+                img_bytes,
+                preprocessing_strategy=preprocessing_strategy,
+                multi_pass=multi_pass,
+                use_ensemble=use_ensemble
+            )
+            results.append((ocr_res, ext_data))
+            detected_fields = [
+                k for k, v in ext_data.get_fields().items()
+                if isinstance(v, ExtractedField) and v.is_detected and v.value
+            ]
+            per_image_summary.append({
+                "image_index": idx,
+                "status": "success",
+                "regions_detected": len(ocr_res.regions),
+                "average_confidence": ocr_res.average_confidence,
+                "fields_found": detected_fields
+            })
+
+        merged_extracted, field_sources = self._merge_extracted_data_with_sources(
+            [r[1] for r in results],
+            merge_strategy=merge_strategy
+        )
+
+        combined_raw_text = "\n---\n".join(
+            f"--- Panel Image {idx + 1} ---\n{r[0].raw_text}" for idx, r in enumerate(results) if r[0].raw_text
+        )
+
+        avg_conf = sum(r[0].average_confidence for r in results) / len(results) if results else 0.0
+        total_regions = sum(len(r[0].regions) for r in results)
+
+        return OCRExtractResponse(
+            ocr_text=combined_raw_text,
+            average_confidence=avg_conf,
+            regions_count=total_regions,
+            fields=merged_extracted.get_fields(),
+            images_processed=len(image_bytes_list),
+            field_sources=field_sources,
+            per_image_summary=per_image_summary
+        )
+
+    def analyze_multiple_images(
+        self,
+        image_bytes_list: List[bytes],
+        preprocessing_strategy: str = "standard",
+        multi_pass: bool = True,
+        use_ensemble: bool = False,
+        brand_name: Optional[str] = None,
+        merge_strategy: str = "best_fields",
+        persist: bool = True,
+        officer_id: Optional[int] = None,
+        image_path: Optional[str] = None,
+        input_type: str = "physical_package"
+    ) -> AnalyzeResponse:
+        """
+        Runs multi-image extraction pipeline across panel images (e.g. front + back panel),
+        merging the best extractions across images and evaluating overall compliance.
+        """
+        if not image_bytes_list:
+            raise ValueError("No images provided for multi-image analysis.")
+
+        if len(image_bytes_list) == 1:
+            resp = self.analyze_image_end_to_end(
+                image_bytes_list[0],
+                preprocessing_strategy=preprocessing_strategy,
+                multi_pass=multi_pass,
+                use_ensemble=use_ensemble,
+                brand_name=brand_name,
+                persist=persist,
+                officer_id=officer_id,
+                image_path=image_path,
+                input_type=input_type
+            )
+            resp.images_processed = 1
+            resp.field_sources = {
+                k: 0 for k, v in resp.extracted_data.get_fields().items()
+                if isinstance(v, ExtractedField) and v.is_detected and v.value
+            }
+            resp.per_image_summary = [{
+                "image_index": 0,
+                "status": "success",
+                "regions_detected": resp.ocr_summary.get("regions_detected", 0),
+                "average_confidence": resp.ocr_summary.get("average_confidence", 0.0),
+                "fields_found": list(resp.field_sources.keys())
+            }]
+            if resp.annotated_image:
+                resp.annotated_images = [resp.annotated_image]
+            return resp
+
+        results = []
+        annotated_images_list: List[str] = []
+        per_image_summary: List[Dict[str, Any]] = []
+
+        for idx, img_bytes in enumerate(image_bytes_list):
+            ocr_res, ext_data, orig_bgr, rect_meta = self.extract_from_image(
+                img_bytes,
+                preprocessing_strategy=preprocessing_strategy,
+                multi_pass=multi_pass,
+                use_ensemble=use_ensemble
+            )
+            results.append((ocr_res, ext_data, orig_bgr, rect_meta))
+
+            detected_fields = [
+                k for k, v in ext_data.get_fields().items()
+                if isinstance(v, ExtractedField) and v.is_detected and v.value
+            ]
+            per_image_summary.append({
+                "image_index": idx,
+                "status": "success",
+                "regions_detected": len(ocr_res.regions),
+                "average_confidence": ocr_res.average_confidence,
+                "fields_found": detected_fields
+            })
+
+        merged_extracted, field_sources = self._merge_extracted_data_with_sources(
+            [r[1] for r in results],
+            merge_strategy=merge_strategy
+        )
+
+        combined_raw_text = "\n---\n".join(
+            f"--- Panel Image {idx + 1} ---\n{r[0].raw_text}" for idx, r in enumerate(results) if r[0].raw_text
+        )
+
+        product_input = merged_extracted.to_product_input(raw_text=combined_raw_text)
+        compliance_result = self.rule_engine.evaluate(product_input, extracted_data=merged_extracted)
+        compliance_result.input_type = input_type
+
+        # Multi-panel attribution logging and note generation
+        panel_notes = []
+        key_fields = ["mrp", "manufacturer_name", "commodity_name", "net_quantity", "date_declaration", "consumer_care"]
+        field_labels = {
+            "mrp": "MRP",
+            "manufacturer_name": "Manufacturer",
+            "commodity_name": "Commodity Name",
+            "net_quantity": "Net Quantity",
+            "date_declaration": "Date of Declaration",
+            "consumer_care": "Consumer Care"
+        }
+        for kf in key_fields:
+            if kf in field_sources:
+                src_img = field_sources[kf] + 1  # 1-indexed for human readability
+                panel_notes.append(f"{field_labels[kf]} found on image {src_img}")
+
+        multi_panel_note = f"Analysis based on {len(image_bytes_list)} images of the same product."
+        if panel_notes:
+            multi_panel_note += f" ({', '.join(panel_notes)})"
+
+        logger.info(f"Multi-Image Fusion Result: {multi_panel_note}")
+
+        # Append multi-panel note to compliance result summary
+        if compliance_result.summary:
+            compliance_result.summary = f"{compliance_result.summary}\n\n[MULTI-PANEL AUDIT] {multi_panel_note}"
+        else:
+            compliance_result.summary = f"[MULTI-PANEL AUDIT] {multi_panel_note}"
+
+        guidance = evaluate_missing_critical_guidance(product_input, compliance_result)
+        if guidance:
+            compliance_result.guidance_note = guidance
+            if guidance not in (compliance_result.summary or ""):
+                compliance_result.summary = f"{compliance_result.summary or ''}\n\n[INSPECTOR GUIDANCE] {guidance}".strip()
+
+        # Generate annotated images for panels (up to best 3)
+        for idx, r in enumerate(results[:3]):
+            bgr_img = r[2]
+            ext_d = r[1]
+            ann_b64 = self.generate_annotated_image(bgr_img, compliance_result, ext_d)
+            if ann_b64:
+                annotated_images_list.append(ann_b64)
+
+        primary_b64 = annotated_images_list[0] if annotated_images_list else None
+        compliance_result.annotated_image = primary_b64
+
+        primary_ocr = results[0][0]
+        authenticity_result = None
+        if brand_name:
+            try:
+                authenticity_result = self.authenticity_checker.compare_to_reference(
+                    image=image_bytes_list[0],
+                    brand_id=brand_name
+                )
+            except Exception as auth_err:
+                logger.warning(f"Authenticity check failed for brand '{brand_name}': {str(auth_err)}")
+
+        scan_record = None
+        if persist and self.history_service:
+            try:
+                scan_record = self.history_service.record_scan(
+                    compliance_result=compliance_result,
+                    extracted_data=merged_extracted,
+                    visual_statistics={
+                        "images_count": len(image_bytes_list),
+                        "average_confidence": sum(r[0].average_confidence for r in results) / len(results),
+                        "total_regions_detected": sum(len(r[0].regions) for r in results),
+                        "raw_text_length": len(combined_raw_text),
+                        "multi_image_merge": True,
+                        "multi_panel_note": multi_panel_note,
+                        "field_sources": field_sources
+                    },
+                    authenticity_result=authenticity_result,
+                    image_path=image_path,
+                    officer_id=officer_id
+                )
+            except Exception as e:
+                logger.warning(f"Failed to persist multi-image scan record: {str(e)}")
+
+        visual_evidence = {
+            "annotated_image_base64": primary_b64,
+            "annotated_images": annotated_images_list,
+            "original_dimensions": [primary_ocr.image_height, primary_ocr.image_width],
+            "bounding_boxes": [],
+            "evidence_statistics": {
+                "total_declarations_found": sum(len(r[0].regions) for r in results),
+                "average_ocr_confidence": sum(r[0].average_confidence for r in results) / len(results),
+                "images_analyzed": len(image_bytes_list)
+            },
+            "multi_panel_note": multi_panel_note
+        }
+
+        return AnalyzeResponse(
+            extracted_data=merged_extracted,
+            compliance_result=compliance_result,
+            ocr_summary={
+                "average_confidence": sum(r[0].average_confidence for r in results) / len(results),
+                "regions_detected": sum(len(r[0].regions) for r in results),
+                "images_analyzed": len(image_bytes_list),
+                "multi_image_merge": True,
+                "strategy_used": preprocessing_strategy,
+                "multi_panel_note": multi_panel_note
+            },
+            annotated_image=primary_b64,
+            annotated_images=annotated_images_list,
+            scan_id=scan_record.id if scan_record else None,
+            authenticity_result=authenticity_result,
+            visual_evidence=visual_evidence,
+            images_processed=len(image_bytes_list),
+            field_sources=field_sources,
+            per_image_summary=per_image_summary
+        )
+
+    def analyze_multiple_images_end_to_end(self, *args, **kwargs) -> AnalyzeResponse:
+        """Alias for backward compatibility."""
+        return self.analyze_multiple_images(*args, **kwargs)
+
 
 

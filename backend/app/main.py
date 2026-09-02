@@ -135,63 +135,101 @@ def evaluate_compliance(product: ProductInput):
     response_model=OCRExtractResponse,
     status_code=status.HTTP_200_OK,
     tags=["OCR Pipeline"],
-    summary="Extract Declarations from Product Image (Multi-Pass Supported)",
-    description="Accepts an image upload, executes optional multi-pass rectification and OCR result ranking, and extracts structured Legal Metrology fields."
+    summary="Extract Declarations from Product Image(s) (Multi-Pass & Multi-Panel Supported)",
+    description="Accepts single or multiple image uploads (e.g. front & back panels), executes optional multi-pass rectification and OCR result ranking, and extracts structured Legal Metrology fields."
 )
 async def extract_declarations_from_image(
-    file: UploadFile = File(..., description="Product label image (JPEG, PNG, WEBP)"),
+    file: Optional[UploadFile] = File(None, description="Single product label image (legacy)"),
+    files: Optional[List[UploadFile]] = File(None, description="Multiple product label images (e.g. front & back panels)"),
+    merge_strategy: str = Query("best_fields", description="Strategy for merging fields across multiple images ('best_fields')"),
     preprocessing_strategy: str = Query("standard", description="Strategy: standard, denoise, high_contrast, binary, raw"),
     multi_pass: bool = Query(False, description="Enable multi-pass rectification and candidate ranking"),
     use_ensemble: bool = Query(False, description="Enable multi-engine OCR ensemble with orientation-aware reading order")
 ):
-    if not file.content_type or not file.content_type.startswith("image/"):
+    upload_list: List[UploadFile] = []
+    if files:
+        upload_list.extend([f for f in files if f and f.filename])
+    if file and file.filename and file not in upload_list:
+        upload_list.append(file)
+
+    if not upload_list:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid file type '{file.content_type}'. Please upload a valid image file (JPEG, PNG, etc.)."
+            detail="No image file received. Please upload at least one image file."
         )
 
     try:
-        contents = await file.read()
-        if len(contents) == 0:
+        image_bytes_list: List[bytes] = []
+        for f in upload_list:
+            if f.content_type and not f.content_type.startswith("image/"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid file type '{f.content_type}'. Please upload a valid image file (JPEG, PNG, etc.)."
+                )
+            contents = await f.read()
+            if len(contents) > 0:
+                image_bytes_list.append(contents)
+
+        if not image_bytes_list:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Empty image file received."
+                detail="Empty image file(s) received."
             )
 
-        ocr_res, extracted, _, _ = compliance_service.extract_from_image(
-            contents,
-            preprocessing_strategy=preprocessing_strategy,
-            multi_pass=multi_pass,
-            use_ensemble=use_ensemble
-        )
+        if len(image_bytes_list) == 1:
+            ocr_res, extracted, _, _ = compliance_service.extract_from_image(
+                image_bytes_list[0],
+                preprocessing_strategy=preprocessing_strategy,
+                multi_pass=multi_pass,
+                use_ensemble=use_ensemble
+            )
 
-        fields_dict = {
-            "product_name": extracted.product_name,
-            "commodity_name": extracted.commodity_name,
-            "manufacturer_name": extracted.manufacturer_name,
-            "manufacturer_address": extracted.manufacturer_address,
-            "packer_name": extracted.packer_name,
-            "packer_address": extracted.packer_address,
-            "importer_name": extracted.importer_name,
-            "importer_address": extracted.importer_address,
-            "net_quantity": extracted.net_quantity,
-            "mrp": extracted.mrp,
-            "unit_sale_price": extracted.unit_sale_price,
-            "date_declaration": extracted.date_declaration,
-            "best_before": extracted.best_before,
-            "consumer_care": extracted.consumer_care,
-            "consumer_care_email": extracted.consumer_care_email,
-            "consumer_care_phone": extracted.consumer_care_phone,
-            "consumer_care_address": extracted.consumer_care_address,
-            "country_of_origin": extracted.country_of_origin,
-        }
+            fields_dict = {
+                "product_name": extracted.product_name,
+                "commodity_name": extracted.commodity_name,
+                "manufacturer_name": extracted.manufacturer_name,
+                "manufacturer_address": extracted.manufacturer_address,
+                "packer_name": extracted.packer_name,
+                "packer_address": extracted.packer_address,
+                "importer_name": extracted.importer_name,
+                "importer_address": extracted.importer_address,
+                "net_quantity": extracted.net_quantity,
+                "mrp": extracted.mrp,
+                "unit_sale_price": extracted.unit_sale_price,
+                "date_declaration": extracted.date_declaration,
+                "best_before": extracted.best_before,
+                "consumer_care": extracted.consumer_care,
+                "consumer_care_email": extracted.consumer_care_email,
+                "consumer_care_phone": extracted.consumer_care_phone,
+                "consumer_care_address": extracted.consumer_care_address,
+                "country_of_origin": extracted.country_of_origin,
+            }
 
-        return OCRExtractResponse(
-            ocr_text=ocr_res.raw_text,
-            average_confidence=ocr_res.average_confidence,
-            regions_count=len(ocr_res.regions),
-            fields=fields_dict
-        )
+            field_src = {k: 0 for k, v in fields_dict.items() if v.is_detected and v.value}
+
+            return OCRExtractResponse(
+                ocr_text=ocr_res.raw_text,
+                average_confidence=ocr_res.average_confidence,
+                regions_count=len(ocr_res.regions),
+                fields=fields_dict,
+                images_processed=1,
+                field_sources=field_src,
+                per_image_summary=[{
+                    "image_index": 0,
+                    "status": "success",
+                    "regions_detected": len(ocr_res.regions),
+                    "average_confidence": ocr_res.average_confidence,
+                    "fields_found": list(field_src.keys())
+                }]
+            )
+        else:
+            return compliance_service.extract_from_multiple_images(
+                image_bytes_list,
+                preprocessing_strategy=preprocessing_strategy,
+                multi_pass=multi_pass,
+                use_ensemble=use_ensemble,
+                merge_strategy=merge_strategy
+            )
     except ValueError as ve:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -282,11 +320,13 @@ async def analyze_vision_evidence(
     response_model=AnalyzeResponse,
     status_code=status.HTTP_200_OK,
     tags=["End-to-End Analysis"],
-    summary="End-to-End: Product Image -> Multi-Pass Rectification -> OCR -> Extraction -> Visual Evidence -> Compliance Verification",
-    description="Processes uploaded image through quality check, image rectification variants, multi-pass OCR ranking, declaration extraction, spatial/readability vision analysis, compliance rule verification, and annotated evidence generation."
+    summary="End-to-End: Product Image(s) -> Multi-Pass Rectification -> OCR -> Extraction -> Visual Evidence -> Compliance Verification",
+    description="Processes uploaded image(s) through quality check, image rectification variants, multi-pass OCR ranking, declaration extraction, spatial/readability vision analysis, compliance rule verification, and annotated evidence generation. Supports single or multiple image uploads."
 )
 async def analyze_product_image(
-    file: UploadFile = File(..., description="Product label image"),
+    file: Optional[UploadFile] = File(None, description="Single product label image"),
+    files: Optional[List[UploadFile]] = File(None, description="Multiple product label images (e.g. front & back panels)"),
+    merge_strategy: str = Query("best_fields", description="Strategy for merging fields across multiple images ('best_fields')"),
     preprocessing_strategy: str = Query("standard", description="Strategy: standard, denoise, high_contrast, binary, raw"),
     multi_pass: bool = Query(True, description="Enable multi-pass image rectification and candidate ranking"),
     use_ensemble: bool = Query(False, description="Enable multi-engine OCR ensemble with orientation-aware reading order"),
@@ -294,29 +334,71 @@ async def analyze_product_image(
     persist: bool = Query(True, description="Persist scan audit record to history database"),
     input_type: str = Query("physical_package", description="Scan input mode: 'physical_package' or 'ecommerce_listing'")
 ):
-    if not file.content_type or not file.content_type.startswith("image/"):
+    upload_list: List[UploadFile] = []
+    if files:
+        upload_list.extend([f for f in files if f and f.filename])
+    if file and file.filename and file not in upload_list:
+        upload_list.append(file)
+
+    if not upload_list:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid file type '{file.content_type}'. Please upload an image file."
+            detail="No image file received. Please upload at least one image file."
         )
 
     try:
-        contents = await file.read()
-        if len(contents) == 0:
+        image_bytes_list: List[bytes] = []
+        for f in upload_list:
+            if f.content_type and not f.content_type.startswith("image/"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid file type '{f.content_type}'. Please upload an image file."
+                )
+            contents = await f.read()
+            if len(contents) > 0:
+                image_bytes_list.append(contents)
+
+        if not image_bytes_list:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Empty image file received."
+                detail="Empty image file(s) received."
             )
 
-        analysis = compliance_service.analyze_image_end_to_end(
-            contents,
-            preprocessing_strategy=preprocessing_strategy,
-            multi_pass=multi_pass,
-            use_ensemble=use_ensemble,
-            brand_name=brand_name,
-            persist=persist,
-            input_type=input_type
-        )
+        if len(image_bytes_list) == 1:
+            analysis = compliance_service.analyze_image_end_to_end(
+                image_bytes_list[0],
+                preprocessing_strategy=preprocessing_strategy,
+                multi_pass=multi_pass,
+                use_ensemble=use_ensemble,
+                brand_name=brand_name,
+                persist=persist,
+                input_type=input_type
+            )
+            analysis.images_processed = 1
+            analysis.field_sources = {
+                k: 0 for k, v in analysis.extracted_data.get_fields().items()
+                if v.is_detected and v.value
+            }
+            analysis.per_image_summary = [{
+                "image_index": 0,
+                "status": "success",
+                "regions_detected": analysis.ocr_summary.get("regions_detected", 0),
+                "average_confidence": analysis.ocr_summary.get("average_confidence", 0.0),
+                "fields_found": list(analysis.field_sources.keys())
+            }]
+            if analysis.annotated_image:
+                analysis.annotated_images = [analysis.annotated_image]
+        else:
+            analysis = compliance_service.analyze_multiple_images(
+                image_bytes_list,
+                preprocessing_strategy=preprocessing_strategy,
+                multi_pass=multi_pass,
+                use_ensemble=use_ensemble,
+                brand_name=brand_name,
+                merge_strategy=merge_strategy,
+                persist=persist,
+                input_type=input_type
+            )
         return analysis
     except ValueError as ve:
         raise HTTPException(

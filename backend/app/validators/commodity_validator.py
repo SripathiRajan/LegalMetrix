@@ -4,6 +4,9 @@ from app.models.product import ProductInput, RuleDefinition, RuleCheckResult, Ru
 from app.validators.base import BaseValidator
 
 
+from app.extraction.normalizer import FieldNormalizer
+
+
 class CommodityNameValidator(BaseValidator):
     """
     Validator for Generic / Common Name of Commodity per Rule 6(1)(b)
@@ -24,6 +27,16 @@ class CommodityNameValidator(BaseValidator):
 
         name_str = str(name).strip()
 
+        # Reject pure product/batch codes (e.g. S60017, AB1234, 98765)
+        if FieldNormalizer.is_code_like(name_str):
+            return self.create_result(
+                rule=rule,
+                status=RuleStatus.FAIL,
+                detected_value=name_str,
+                reason=f"Detected value '{name_str}' appears to be a product/batch code, not a common/generic commodity name as required under Rule 6(1)(b).",
+                severity=SeverityLevel.HIGH
+            )
+
         if len(name_str) < 2:
             return self.create_result(
                 rule=rule,
@@ -40,6 +53,7 @@ class CommodityNameValidator(BaseValidator):
             reason=f"Common/generic commodity name '{name_str}' declared per Rule 6(1)(b).",
             severity=SeverityLevel.MEDIUM
         )
+
 
 
 class UnitSalePriceValidator(BaseValidator):

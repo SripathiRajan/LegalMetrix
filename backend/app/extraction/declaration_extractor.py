@@ -450,24 +450,41 @@ class DeclarationExtractor:
         image_array: Optional[Any],
         scale: float
     ) -> Tuple[ExtractedField, ExtractedField]:
-        for line in lines[:3]:
-            line_clean = line.strip()
-            if len(line_clean) > 2 and not any(kw in line_clean.lower() for kw in MANUFACTURER_KEYWORDS + CONSUMER_CARE_KEYWORDS + ["mrp", "net wt", "net qty", "mfd", "pkg", "date of"]):
-                conf, boxes = self._find_region_evidence(line_clean, regions)
-                field = self._create_field_with_evidence(
-                    value=line_clean,
-                    raw_value=line_clean,
-                    confidence=conf,
-                    source_text=line,
-                    bounding_boxes=boxes,
-                    img_w=img_w,
-                    img_h=img_h,
-                    image_array=image_array,
-                    scale=scale
-                )
-                return field, field
+        candidates: List[Tuple[str, int]] = []
 
-        return ExtractedField(is_detected=False), ExtractedField(is_detected=False)
+        # Scan top lines (up to 6 lines) for commodity name candidates
+        for i, line in enumerate(lines[:6]):
+            line_clean = line.strip()
+            if len(line_clean) > 2 and not any(kw in line_clean.lower() for kw in MANUFACTURER_KEYWORDS + PACKER_KEYWORDS + IMPORTER_KEYWORDS + CONSUMER_CARE_KEYWORDS + ["mrp", "net wt", "net qty", "mfd", "pkg", "date of", "best before", "unit sale price", "country of origin"]):
+                candidates.append((line_clean, i))
+
+        if not candidates:
+            return ExtractedField(is_detected=False), ExtractedField(is_detected=False)
+
+        # Prefer non-code-like descriptive names over product codes
+        descriptive_candidates = [c for c in candidates if not self.normalizer.is_code_like(c[0])]
+
+        if descriptive_candidates:
+            # Pick longest descriptive candidate, breaking ties by earlier line position
+            chosen_candidate = max(descriptive_candidates, key=lambda c: (len(c[0]), -c[1]))
+            chosen_text = chosen_candidate[0]
+        else:
+            # Only code-like candidates found
+            chosen_text = candidates[0][0]
+
+        conf, boxes = self._find_region_evidence(chosen_text, regions)
+        field = self._create_field_with_evidence(
+            value=chosen_text,
+            raw_value=chosen_text,
+            confidence=conf,
+            source_text=chosen_text,
+            bounding_boxes=boxes,
+            img_w=img_w,
+            img_h=img_h,
+            image_array=image_array,
+            scale=scale
+        )
+        return field, field
 
     def _infer_category(self, raw_text: str) -> str:
         text_lower = raw_text.lower()
