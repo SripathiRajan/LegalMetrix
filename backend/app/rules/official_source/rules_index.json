@@ -1,0 +1,564 @@
+{
+  "dataset_name": "Official DoCA Legal Metrology (Packaged Commodities) Rules & Amendments",
+  "total_documents": 40,
+  "documents": [
+    {
+      "filename": "2022 3rd amendment in PCR Garments_1733228786.pdf",
+      "title": "2022 3rd amendment in PCR Garments",
+      "date": "2022",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "e-commerce",
+        "country_of_origin",
+        "garments",
+        "qr_code",
+        "mrp_declaration",
+        "manufacturer_packer",
+        "consumer_care"
+      ],
+      "char_count": 4961,
+      "page_count": 2
+    },
+    {
+      "filename": "2023.01.27 amendment in amendment of 2023 PCR_1732871665.pdf",
+      "title": "2023.01.27 amendment in amendment of 2023 PCR",
+      "date": "2023.01.27",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "qr_code"
+      ],
+      "char_count": 3237,
+      "page_count": 2
+    },
+    {
+      "filename": "2023.06.5 amendment in amendment of PCR ext till 30.6.2023_1732871791.pdf",
+      "title": "2023.06.5 amendment in amendment of PCR ext till 30.6.2023",
+      "date": "2023.06.5",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "qr_code"
+      ],
+      "char_count": 3227,
+      "page_count": 2
+    },
+    {
+      "filename": "2023.10.6 amendment in PCR_1732871982.pdf",
+      "title": "2023.10.6 amendment in PCR",
+      "date": "2023.10.6",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "e-commerce",
+        "country_of_origin",
+        "edible_oil",
+        "qr_code",
+        "unit_sale_price",
+        "mrp_declaration",
+        "net_quantity",
+        "date_declaration",
+        "manufacturer_packer",
+        "consumer_care"
+      ],
+      "char_count": 11996,
+      "page_count": 5
+    },
+    {
+      "filename": "2023.12.29 Standard Operating Procedure for Edible oil & Fats Net Quantity Measurement signed copy_1732872010.pdf",
+      "title": "2023.12.29 Standard Operating Procedure for Edible oil & Fats Net Quantity Measurement signed copy",
+      "date": "2023.12.29",
+      "document_type": "Guidelines",
+      "language": "English",
+      "key_topics": [
+        "edible_oil",
+        "qr_code",
+        "unit_sale_price",
+        "net_quantity",
+        "manufacturer_packer"
+      ],
+      "char_count": 12290,
+      "page_count": 5
+    },
+    {
+      "filename": "2023.3.6 farm produce upto 50 kg as per PCR_1732871747.pdf",
+      "title": "Packages of agriculture farm produce upto 50kg under the Legal Metrology",
+      "date": "2023.3.6",
+      "document_type": "Legal Metrology Circular/Rule",
+      "language": "English",
+      "key_topics": [
+        "country_of_origin",
+        "manufacturer_packer"
+      ],
+      "char_count": 1666,
+      "page_count": 1
+    },
+    {
+      "filename": "2023.3.6 Fuel capacity vehicle tank_1732871722.pdf",
+      "title": "Fuel Capacity of Car / Two Wheeler's mentioned in the Service Manuals by Vehicle",
+      "date": "2023.3.6",
+      "document_type": "Legal Metrology Circular/Rule",
+      "language": "English",
+      "key_topics": [
+        "manufacturer_packer"
+      ],
+      "char_count": 1899,
+      "page_count": 1
+    },
+    {
+      "filename": "2023.6.23 QR Code PCR amendment_1732871827.pdf",
+      "title": "2023.6.23 QR Code PCR amendment",
+      "date": "2023.6.23",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "country_of_origin",
+        "qr_code",
+        "manufacturer_packer"
+      ],
+      "char_count": 6387,
+      "page_count": 3
+    },
+    {
+      "filename": "2023.6.28 amendment in amendment of PCR ext till 31.8.2023_1733228263.pdf",
+      "title": "2023.6.28 amendment in amendment of PCR ext till 31.8.2023",
+      "date": "2023.6.28",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "qr_code"
+      ],
+      "char_count": 3199,
+      "page_count": 2
+    },
+    {
+      "filename": "2023.7.10 Medical Devices revision of prices_1733228304.pdf",
+      "title": "Provisions of the Legal Metrology (Packaged Commodities) Rules, 2011 on Medical",
+      "date": "2023.7.10",
+      "document_type": "Legal Metrology Circular/Rule",
+      "language": "English",
+      "key_topics": [
+        "medical_devices",
+        "mrp_declaration"
+      ],
+      "char_count": 2204,
+      "page_count": 1
+    },
+    {
+      "filename": "2026.02.13 PCR 1st COO Filter on e-commerce websites_1771231030.pdf",
+      "title": "2026.02.13 PCR 1st COO Filter on e commerce websites",
+      "date": "2026.02.13",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "e-commerce",
+        "country_of_origin",
+        "qr_code"
+      ],
+      "char_count": 3359,
+      "page_count": 2
+    },
+    {
+      "filename": "2026.4.27 PCR 2nd COO from 1.7.2027_1777348487.pdf",
+      "title": "2026.4.27 PCR 2nd COO from 1.7.2027",
+      "date": "2026.4.27",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "e-commerce",
+        "country_of_origin",
+        "qr_code"
+      ],
+      "char_count": 3496,
+      "page_count": 2
+    },
+    {
+      "filename": "230946_1732871433.pdf",
+      "title": "230946",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "country_of_origin",
+        "qr_code",
+        "unit_sale_price",
+        "mrp_declaration",
+        "net_quantity"
+      ],
+      "char_count": 8549,
+      "page_count": 4
+    },
+    {
+      "filename": "248432_1732871904.pdf",
+      "title": "248432",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "qr_code"
+      ],
+      "char_count": 3277,
+      "page_count": 2
+    },
+    {
+      "filename": "267107_1761404707.pdf",
+      "title": "267107",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "medical_devices",
+        "qr_code"
+      ],
+      "char_count": 5154,
+      "page_count": 3
+    },
+    {
+      "filename": "2nd PCR Pan Masala_1764736734.pdf",
+      "title": "2nd PCR Pan Masala",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "pan_masala",
+        "qr_code"
+      ],
+      "char_count": 3181,
+      "page_count": 2
+    },
+    {
+      "filename": "8(i)_0_1732860957.pdf",
+      "title": "8(i) 0",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "English",
+      "key_topics": [
+        "e-commerce",
+        "manufacturer_packer"
+      ],
+      "char_count": 1871,
+      "page_count": 1
+    },
+    {
+      "filename": "8(ii)_0_1732860982.pdf",
+      "title": "8(ii) 0",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "English",
+      "key_topics": [
+        "general_packaged_commodities"
+      ],
+      "char_count": 1501,
+      "page_count": 1
+    },
+    {
+      "filename": "8(iii)_0_1732861046.pdf",
+      "title": "8(iii) 0",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "English",
+      "key_topics": [
+        "net_quantity",
+        "manufacturer_packer"
+      ],
+      "char_count": 4409,
+      "page_count": 2
+    },
+    {
+      "filename": "8(ix)_0_1732870718.pdf",
+      "title": "8(ix) 0",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "English",
+      "key_topics": [
+        "edible_oil"
+      ],
+      "char_count": 1889,
+      "page_count": 2
+    },
+    {
+      "filename": "8(v)_0_1732861119.pdf",
+      "title": "8(v) 0",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "English",
+      "key_topics": [
+        "country_of_origin",
+        "edible_oil",
+        "net_quantity",
+        "manufacturer_packer"
+      ],
+      "char_count": 8818,
+      "page_count": 9
+    },
+    {
+      "filename": "8(vi)_0_1732861153.pdf",
+      "title": "8(vi) 0",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "English",
+      "key_topics": [
+        "general_packaged_commodities"
+      ],
+      "char_count": 1743,
+      "page_count": 2
+    },
+    {
+      "filename": "8(vii)_0_1732861181.pdf",
+      "title": "8(vii) 0",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "English",
+      "key_topics": [
+        "country_of_origin",
+        "qr_code",
+        "mrp_declaration",
+        "net_quantity",
+        "manufacturer_packer"
+      ],
+      "char_count": 5666,
+      "page_count": 5
+    },
+    {
+      "filename": "8(viii)_0 (1)_1732870622.pdf",
+      "title": "8(viii) 0 (1)",
+      "date": "21-06-2014",
+      "document_type": "Amendment",
+      "language": "English",
+      "key_topics": [
+        "edible_oil"
+      ],
+      "char_count": 1516,
+      "page_count": 2
+    },
+    {
+      "filename": "8(x)_0_1732870750.pdf",
+      "title": "8(x) 0",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "English",
+      "key_topics": [
+        "country_of_origin",
+        "edible_oil",
+        "pan_masala",
+        "net_quantity",
+        "manufacturer_packer",
+        "consumer_care"
+      ],
+      "char_count": 7385,
+      "page_count": 6
+    },
+    {
+      "filename": "8(xi)_0_1732871315.pdf",
+      "title": "8(xi) 0",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "qr_code",
+        "mrp_declaration"
+      ],
+      "char_count": 4004,
+      "page_count": 2
+    },
+    {
+      "filename": "8(xii)_0_1732871346.pdf",
+      "title": "8(xii) 0",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "e-commerce",
+        "country_of_origin",
+        "medical_devices",
+        "qr_code",
+        "mrp_declaration",
+        "net_quantity",
+        "date_declaration",
+        "manufacturer_packer",
+        "consumer_care"
+      ],
+      "char_count": 38962,
+      "page_count": 14
+    },
+    {
+      "filename": "8(xiii)_0_1732871373.pdf",
+      "title": "8(xiii) 0",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "qr_code"
+      ],
+      "char_count": 2483,
+      "page_count": 2
+    },
+    {
+      "filename": "8_1732871406.pdf",
+      "title": "to the provision",
+      "date": "2011 (as amended)",
+      "document_type": "Notification",
+      "language": "English",
+      "key_topics": [
+        "country_of_origin",
+        "garments",
+        "edible_oil",
+        "medical_devices",
+        "mrp_declaration",
+        "net_quantity",
+        "date_declaration",
+        "manufacturer_packer",
+        "consumer_care"
+      ],
+      "char_count": 81639,
+      "page_count": 83
+    },
+    {
+      "filename": "advisory_pcr(1)_0 (1)_1732860898.pdf",
+      "title": "Implementation of the Legal Metrology Act, 2009 and the Legal",
+      "date": "29.4.2011",
+      "document_type": "Advisory",
+      "language": "English",
+      "key_topics": [
+        "e-commerce",
+        "manufacturer_packer"
+      ],
+      "char_count": 2094,
+      "page_count": 2
+    },
+    {
+      "filename": "Amendment of PCR ext till 31.12.2023 (1)_1732871950.pdf",
+      "title": "Amendment of PCR ext till 31.12.2023 (1)",
+      "date": "31.12.2023",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "qr_code"
+      ],
+      "char_count": 3260,
+      "page_count": 2
+    },
+    {
+      "filename": "corrigendum_PCR_0_0_1732860695.pdf",
+      "title": "corrigendum PCR 0 0",
+      "date": "0.0.1732",
+      "document_type": "Amendment",
+      "language": "English",
+      "key_topics": [
+        "general_packaged_commodities"
+      ],
+      "char_count": 1189,
+      "page_count": 1
+    },
+    {
+      "filename": "eGazette_30_nov_22_1732871630_1746006280.pdf",
+      "title": "eGazette 30 nov 22 1732871630",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "qr_code"
+      ],
+      "char_count": 3255,
+      "page_count": 2
+    },
+    {
+      "filename": "GSR226_1732871458.pdf",
+      "title": "GSR226",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "country_of_origin",
+        "qr_code",
+        "unit_sale_price",
+        "mrp_declaration",
+        "net_quantity",
+        "manufacturer_packer"
+      ],
+      "char_count": 6395,
+      "page_count": 3
+    },
+    {
+      "filename": "guidelines dt 30_9_2011 for PCR(1)_0 (1)_1732860774.pdf",
+      "title": "Implementation of the Legal Metrology Act, 2009 and the Legal",
+      "date": "30.9.2011",
+      "document_type": "Guidelines",
+      "language": "English",
+      "key_topics": [
+        "manufacturer_packer"
+      ],
+      "char_count": 2047,
+      "page_count": 1
+    },
+    {
+      "filename": "LM_Advisory_for_Readymade_Garments_0_1732710356.pdf",
+      "title": "-The Legal Metrology (Packaged Commodities) Rules,,2011 - Advisory for",
+      "date": "31.3.2017",
+      "document_type": "Advisory",
+      "language": "English",
+      "key_topics": [
+        "garments",
+        "mrp_declaration",
+        "manufacturer_packer"
+      ],
+      "char_count": 3524,
+      "page_count": 3
+    },
+    {
+      "filename": "Notification -  Legal Metrology (QR Code)_1732871487.pdf",
+      "title": "Notification    Legal Metrology (QR Code)",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "country_of_origin",
+        "qr_code",
+        "manufacturer_packer"
+      ],
+      "char_count": 7288,
+      "page_count": 3
+    },
+    {
+      "filename": "PCR_1732871549.pdf",
+      "title": "PCR",
+      "date": "2011 (as amended)",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "qr_code"
+      ],
+      "char_count": 3085,
+      "page_count": 2
+    },
+    {
+      "filename": "PCR_3rd_29May2026_1780376045.pdf",
+      "title": "PCR 3rd 29May2026",
+      "date": "2026",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "e-commerce",
+        "country_of_origin",
+        "qr_code",
+        "mrp_declaration",
+        "manufacturer_packer"
+      ],
+      "char_count": 6210,
+      "page_count": 3
+    },
+    {
+      "filename": "PCR_Amendment_24March2023_1732871698.pdf",
+      "title": "PCR Amendment 24March2023",
+      "date": "2023",
+      "document_type": "Amendment",
+      "language": "Bilingual (Hindi-English)",
+      "key_topics": [
+        "qr_code"
+      ],
+      "char_count": 3264,
+      "page_count": 2
+    }
+  ]
+}
