@@ -71,3 +71,8 @@ Thumbs.db
 *.db
 *.sqlite3
 
+# Node dependencies
+node_modules/
+dist/
+
+
